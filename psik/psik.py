@@ -2,13 +2,14 @@ import asyncio
 from typing import Optional
 from pathlib import Path
 import logging
+from typing_extensions import Annotated
 import sys
 _logger = logging.getLogger(__name__)
 
 import typer
 
 from .config import load_config
-from .job import JobManager
+from .job import JobManager, Job
 from .models import JobSpec, ResourceSpec, JobAttributes, load_jobspec
 
 def setup_logging(v, vv):
@@ -17,52 +18,50 @@ def setup_logging(v, vv):
     elif v:
         logging.basicConfig(level=logging.INFO)
 
-async def run_in_loop(w, timeout=None):
-    async with EventLoop(timeout) as ev:
-        ev.start(w)
-
 app = typer.Typer()
 
+V1 = Annotated[bool, typer.Option("-v", help="show info-level logs")]
+V2 = Annotated[bool, typer.Option("-vv", help="show debug-level logs")]
+CfgArg = Annotated[Optional[Path], typer.Option("--config",
+                   help="Config file path [default ~/.config/psik.json].")]
+
 @app.command()
-def status(job : str = typer.Argument(..., help="Job's timestamp / handle."),
-        v : bool = typer.Option(False, "-v", help="show info-level logs"),
-        vv : bool = typer.Option(False, "-vv", help="show debug-level logs"),
-        config : Optional[Path] = typer.Option(None, help="Config file path [default ~/.config/psik.json].")):
+def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     Read job status information and history.
     """
     setup_logging(v, vv)
-    config = load_config(config)
+    config = load_config(cfg)
     base = Path(config.prefix) / config.backend
 
-    job = Job(base / str(job))
+    job = Job(base / str(stamp))
     #print(job.spec.dump_model_json(indent=4))
     print(job.spec.name)
     print()
-    print("time state info")
+    print("time ndx state info")
     for line in job.history:
-        print("%.3f %10s %d" % line)
+        print("%.3f %3d %10s %8d" % line)
 
 @app.command()
-def cancel(job : str = typer.Argument(..., help="Job's timestamp / handle."),
-        v : bool = typer.Option(False, "-v", help="show info-level logs"),
-        vv : bool = typer.Option(False, "-vv", help="show debug-level logs"),
-        config : Optional[Path] = typer.Option(None, help="Config file path [default ~/.config/psik.json].")):
+def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     Cancel a job.
     """
     setup_logging(v, vv)
-    config = load_config(config)
+    config = load_config(cfg)
     base = Path(config.prefix) / config.backend
 
-    job = Job(base / str(job))
-    job.cancel()
+    job = Job(base / str(stamp))
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(job.cancel())
 
 @app.command()
 def reached(base : str = typer.Argument(..., help="Job's base directory."),
             jobidx : int = typer.Argument(..., help="Sequential job index."),
             state : str = typer.Argument(..., help="State reached by job."),
-            info  : int = typer.Argument(0, help="Status code.")):
+            info  : int = typer.Argument(default=0, help="Status code.")):
     """
     Record that a job has entered the given state.
     This script is typically not called by a user, but
@@ -72,35 +71,28 @@ def reached(base : str = typer.Argument(..., help="Job's base directory."),
     job.reached(jobidx, state, info)
 
 @app.command()
-def ls( v : bool = typer.Option(False, "-v", help="show info-level logs"),
-        vv : bool = typer.Option(False, "-vv", help="show debug-level logs"),
-        config : Optional[Path] = typer.Option(None, help="Config file path [default ~/.config/psik.json].")):
+def ls(v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     List jobs.
     """
     setup_logging(v, vv)
-    config = load_config(config)
+    config = load_config(cfg)
     base = Path(config.prefix) / config.backend
 
     mgr = JobManager(base, defaults = config.default_attr)
-    for name, info in mgr.ls().items():
-        print(f"# {name}, {info.name}")
-        print()
-        print("    time state info")
-        for line in job.history:
-            print("    %f %s %d" % line)
+    for name, job in mgr.ls().items():
+        t, ndx, state, info = job.history[-1]
+        print(f"{name} {job.spec.name} {t} {ndx} {state} {info}")
 
 @app.command()
 def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
-        test    : bool = typer.Option(False, help="create scripts, but do not run"),
-        v       : bool = typer.Option(False, "-v", help="show info-level logs"),
-        vv      : bool = typer.Option(False, "-vv", help="show debug-level logs"),
-        config  : Optional[Path] = typer.Option(None, help="Config file path [default ~/.config/psik.json].")):
+        test    : Annotated[bool, typer.Option(help="create scripts, but do not run")] = False,
+        v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     Run a job from a jobspec.json file.
     """
     setup_logging(v, vv)
-    config = load_config(config)
+    config = load_config(cfg)
     base = Path(config.prefix) / config.backend
 
     mgr = JobManager(base, defaults = config.default_attr)

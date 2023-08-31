@@ -1,4 +1,4 @@
-from typing import Union, Dict
+from typing import Union, Dict, Tuple, List
 
 import os
 import asyncio
@@ -8,7 +8,7 @@ from functools import cache
 from time import sleep
 from time import time as timestamp
 
-import pystache
+import pystache # type: ignore
 
 from .models import JobSpec, JobAttributes
 from .statfile import read_csv, append_csv, create_file
@@ -18,44 +18,110 @@ class Job:
         """ Note: read_info must be True unless you
             only plan to call reached() and nothing else.
         """
-        self.base = Path(base)
-        self.stamp = base.name
+        base = Path(base)
+        self.base = base
+        self.stamp = str(base.name)
+
+        self.valid = False
+        self.spec = JobSpec(script="")
+        self.history : List[Tuple[float,int,str,int]] = []
 
         if read_info:
-            spec = (base/'spec.json').read_text(encoding='utf-8')
-            self.spec = JobSpec.model_validate_json(spec)
-            self.history = read_csv(base / 'status.csv')
-            for step in self.history: # parse history
-                step[0] = float(step[0])
-                step[1] = int(step[1])
-                step[3] = int(step[3])
-        else:
-            self.spec = None
-            self.history = []
+            self.read_info()
+
+    def read_info(self):
+        base = self.base
+        spec = (base/'spec.json').read_text(encoding='utf-8')
+        self.spec = JobSpec.model_validate_json(spec)
+        history = read_csv(base / 'status.csv')
+        for step in history: # parse history
+            self.history.append( (
+                    float(step[0]), int(step[1]), step[2], int(step[3])) )
+        self.valid = True
 
     def reached(self, jobidx : int, state : str, info=0):
         """ Mark job as having reached the given state.
             info is usually the job_id (when known).
         """
         t = timestamp()
-        append_csv(self.base / 'status.csv', t, state, info)
-        self.history.append( [t, jobidx, state, info] )
+        data = (t, jobidx, state, info)
+        self.history.append( data )
+        append_csv(self.base / 'status.csv', *data)
+
+    def summarize(self):
+        jobndx = 1
+
+        status = {
+            'queued'    : set(),
+            'active'    : set(),
+            'cancelled' : set(),
+            'failed'    : set(),
+            'completed' : set()
+        }
+        for t, ndx, state, info in self.history:
+            if ndx >= jobndx:
+                jobndx = ndx+1
+            if state in status:
+                status[state].add(ndx)
+
+        status['queued'] -= status['active']
+        status['active'] -= status['cancelled'] \
+                          | status['failed']    \
+                          | status['completed']
+        return jobndx, status
 
     async def submit(self) -> bool:
-        # subst must be run from a cache-directory
-        #Path(self.config.cachedir).chdir()
-        # ensure run-script exists, otherwise call subst to create it.
-        out = await runcmd(str(self.base / 'scripts' / 'submit.rc'))
+        """Run pre_submit script (if applicable)
+           and then the submit script.
+        """
+        if not self.valid:
+            self.read_info()
+
+
+        pre_submit = self.base / 'scripts' / 'pre_submit'
+        if len(self.history) == 1 and pre_submit.exists():
+            out = await runcmd(str(pre_submit))
+        if isinstance(out, int):
+            return False
+
+        jobndx, _ = self.summarize()
+
+        out = await runcmd(str(self.base / 'scripts' / 'submit'), str(jobndx))
         if isinstance(out, int):
             return False
         native_job_id = int(out)
-        self.reached(0, 'queued', native_job_id)
+        self.reached(jobndx, 'queued', native_job_id)
+        return True
+
+    async def cancel(self) -> bool:
+        # Prevent a race condition by recording this first.
+        self.reached(0, 'canceled')
+        self.read_info()
+
+        native_ids = {}
+        for t, ndx, state, info in self.history:
+            if state == 'queued':
+                native_ids[ndx] = info
+            elif state == 'completed':
+                del native_ids[ndx]
+            elif state == 'failed':
+                del native_ids[ndx]
+
+        out = await runcmd(str(self.base / 'scripts' / 'cancel'),
+                           *[str(job_id) for ndx, job_id in native_ids.items()])
+        if isinstance(out, int):
+            return False
+        on_canceled = self.base / 'scripts' / 'on_canceled'
+        if on_canceled.exists():
+            out = await runcmd(str(on_canceled))
+        if isinstance(out, int):
+            return False
         return True
 
 @cache
 def read_template(backend, act):
     s = importlib.resources.read_text(__package__ + '.templates',
-                                      f"{backend}-{act}.rc")
+                                      f"{backend}-{act}")
     return pystache.parse(s)
 
 template_types = ['submit', 'cancel', 'job']
@@ -99,7 +165,7 @@ class JobManager:
                 base.mkdir()
                 break
             except FileExistsError:
-                time.sleep(0.001)
+                sleep(0.001)
 
         if jobspec.directory is None:
             workdir = base / 'work'
@@ -138,10 +204,10 @@ class JobManager:
         data = {'job': jobspec.model_dump(),
                 'base': str(base)
                }
-        custom = data['job']['attributes']['custom_attributes'].get(
-                                    self.backend, {})
-        data['job']['attributes']['custom_attributes'] = \
-          [ {'key': k, 'value': v} for k, v in custom ]
+        custom1 = jobspec.attributes.custom_attributes.get(self.backend, {})
+        custom = [ {'key': k, 'value': v} for k, v in custom1.items() ]
+        data['job']['attributes']['custom_attributes'] = custom # type: ignore[index]
+
         for act, v in templates.items():
             templates[act] = r.render(v, data)
 
@@ -166,24 +232,24 @@ def create_job(base : Path, jobspec : JobSpec,
             Fills out the "base / " subdirectory:
                - spec.json
                - status.csv
-               - on_*.rc
-               - scripts/(submit.rc cancel.rc job.rc run)
-               - empty work/ and out/ directories
+               - scripts/(pre_submit on_* submit cancel job run)
+               - empty work/ and log/ directories
     """
     assert base.is_dir()
-    assert Path(jobspec.directory).is_dir()
+    assert jobspec.directory is not None and Path(jobspec.directory).is_dir()
     (base/'scripts').mkdir()
-    (base/'out').mkdir()
+    (base/'log').mkdir()
     create_file(base/'spec.json', jobspec.model_dump_json(indent=4), 0o644)
-    create_file(base/'scripts'/'submit.rc', submit, 0o755)
-    create_file(base/'scripts'/'cancel.rc', cancel, 0o755)
-    create_file(base/'scripts'/'job.rc', job, 0o755)
+    create_file(base/'scripts'/'submit', submit, 0o755)
+    create_file(base/'scripts'/'cancel', cancel, 0o755)
+    create_file(base/'scripts'/'job', job, 0o755)
     create_file(base/'scripts'/'run', jobspec.script, 0o755)
     #(base/'scripts'/'run').unlink(missing_ok=True)
     default_action = "#!/usr/bin/env rc\n"
     for state in ["active", "completed", "failed", "canceled"]:
-        create_file(base/'scripts'/f'on_{state}.rc',
+        create_file(base/'scripts'/f'on_{state}',
                     default_action, 0o755)
+    create_file(base/'scripts'/f'pre_submit', default_action, 0o755)
     # TODO: put in special on_active and on_completed hooks
     #
     # log completion of 'new' status

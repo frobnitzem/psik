@@ -32,8 +32,9 @@ def test_app(tmp_path):
       "script": "#!/usr/bin/env rc\npwd >pwd\nhostname >host\n"
     }
     """)
+    spec = str(spec)
 
-    result = runner.invoke(app, ["run", "--config", cfg, "--test", str(spec)])
+    result = runner.invoke(app, ["run", "--config", cfg, "--test", spec])
     print(result.stdout)
     assert result.exit_code == 0
 
@@ -41,7 +42,8 @@ def test_app(tmp_path):
     assert len(jobs) == 1
     job = jobs[0]
 
-    result = runner.invoke(app, ["run", "--config", cfg, str(spec)])
+    result = runner.invoke(app, ["run", "--config", cfg, spec])
+    print(result.stdout)
     assert result.exit_code == 0
     jobs = list(base.glob("*"))
     assert len(jobs) == 2

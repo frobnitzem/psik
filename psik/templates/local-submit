@@ -1,0 +1,5 @@
+#!/usr/bin/env rc
+# local submission forks job into a background process
+cd '{{job.directory}}' && \
+'{{base}}/scripts/job' $* &
+echo $apid

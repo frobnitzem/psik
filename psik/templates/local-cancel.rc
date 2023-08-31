@@ -1,3 +1,0 @@
-#!/usr/bin/env rc
-# FIXME: read jobid from status.csv
-kill $jobid

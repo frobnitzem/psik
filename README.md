@@ -14,26 +14,37 @@ prefix/
   backend/
     `<timestamp>`/
       spec.json  - JobSpec data
-      status.csv - timestamp,JobState,job\_id,info -- history for job state
+      status.csv - timestamp,jobndx,JobState,info -- history for job state
           timestamp is a system local time (output of time.time() call)
+          jobndx is an integer sequence number of an instance of job: 1, 2, ...
           JobState is one of the values in :class:`JobState`
-          job\_id is an integer sequence number of an instance of job.rc: 1, 2, ...
-          info is an integer correponding to a scheduler job\_id or
-          return status code
+          info is an integer correponding to a scheduler's jobid (for queued)
+          or a return status code (other states)
       scripts/ - directory containing
-        pre\_submit.rc  - script to run before submitting job
-                          An error will prevent job submission.
-        on\_start.rc    - script to run when job starts
-        on\_fail.rc     - script to run from `job.rc` on failing exit
-        on\_complete.rc - script to run from `job.rc` on successful exit
-        on\_cancel.rc   - script to run on submit node after cancellation succeeds
-        submit.rc - Submit job.rc to the backend.
-        cancel.rc - Ask the backend to cancel job.rc.
-                    Has no effect if job has already completed / failed.
-        job.rc    - script run during the job (working directory is ../work)
+        pre_submit   - script run on submitting node once before submitting the
+                        first instance of the job
+                        An error will prevent job submission.
+        on_active    - script to run when job starts
+        on_completed - script to run from `job` on successful exit
+        on_failed    - script to run from `job` on failing exit
+        on_canceled  - script to run on cancelling node after cancellation succeeds
+        submit       - Submit job.rc to the backend.
+                       Submit is provided with the job serial number as its
+                       only argument.
+
+        cancel       - Ask the backend to cancel job.rc.
+                       Has no effect if job has already completed / failed.
+
+                       Cancel is provided with a list of native job-ids
+                       as arguments.
+
+        job          - script run during the job (working directory is ../work)
+                       `job` is provided with the
+
+        run          - user's run-script -- invoked by job
       work/ - directory where work is done
               may be a symbolic link to a node-local filesystem
-      logs/ - directory holding logs in the naming scheme,
+      log/  - directory holding logs in the naming scheme,
            stdout.1 - from first run of job
            stderr.1
            stdout.2 - from second run of job
@@ -80,7 +91,7 @@ to the data model, and three changes to the execution semantics:
   - resources : ResourceSpec = ResourceSpec()
   - attributes : JobAttributes = JobAttributes()
   - ~~pre\_launch~~
-  - _pre\_submit_ : str -- pre\_launch has been replaced with pre\_submit. It is a script, not a filename.
+  - _pre\_submit_ : str -- pre\_launch has been replaced with pre\_submit. It is a script, not a filename. It is run just before submitting the job.
   - ~~post\_launch~~
   - launcher=None
   - _events_ : Dict[JobState : str] = {} -- callbacks
