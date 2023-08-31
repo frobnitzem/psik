@@ -9,9 +9,10 @@ It provides these by introducing a strong convention
 for internal tracking of job information using
 a directory tree:
 
+```
 prefix/
   backend/
-    <timestamp>/
+    `<timestamp>`/
       spec.json  - JobSpec data
       status.csv - timestamp,JobState,job\_id,info -- history for job state
           timestamp is a system local time (output of time.time() call)
@@ -37,6 +38,7 @@ prefix/
            stderr.1
            stdout.2 - from second run of job
            stderr.2, etc.
+```
 
 Because of this, PSI/K can provide a nice command-line replacement
 for a batch queue system that transfers across many backends:
@@ -109,19 +111,19 @@ and moved out of `JobAttributes` and into `ResourceSpec`.
 Internally, PSI/K implements each backend by including three templates:
 
 psik/templates/
- * <backend>-submit.rc -- Submit a job to the queue.
+ * `<backend>-submit.rc` -- Submit a job to the queue.
                           Output to stderr is printed to the user's terminal.
                           On success, print only the backend's native job\id
                           to stdout and return 0.
                           On failure, must return nonzero. 
- * <backend>-job.rc    -- Job submitted to the queue.
+ * `<backend>-job.rc`    -- Job submitted to the queue.
                           Should insert job resource and attributes
                           in a way the backend understands.
                           Must call psik logging and callbacks
                           at appropriate points. 
                           Must setup "Environment during job execution"
                           as specified below.
- * <backend>-cancel.rc -- Ask the backend to cancel the job.
+ * `<backend>-cancel.rc` -- Ask the backend to cancel the job.
                           Must call psik logging and callbacks
                           at appropriate points.
 
@@ -130,7 +132,7 @@ psik/templates/
 The following shell variables are defined during job execution:
 
 - mpirun -- A space-separated invocation to `JobSpec.launcher`.
-            Executing $mpirun <programname> will
+            Executing `$mpirun <programname>` will
             launch the program across all resources allocated to the job
             using the launcher specified.
 - nodes  -- number of nodes allocated to the job
