@@ -27,15 +27,15 @@ def test_app(tmp_path):
     base = Path(config.prefix) / config.backend
 
     spec = Path(tmp_path/'jobspec.json')
-    spec.write_text("""
+    spec.write_text(r"""
     { "name": "foo",
-      "script": "#!/usr/bin/env rc\\npwd >pwd\\nhostname >host\\n",
+      "script": "#!/usr/bin/env rc\npwd >pwd\nhostname >host\n"
     }
     """)
 
     result = runner.invoke(app, ["run", "--config", cfg, "--test", str(spec)])
-    assert result.exit_code == 0
     print(result.stdout)
+    assert result.exit_code == 0
 
     jobs = list(base.glob("*"))
     assert len(jobs) == 1
@@ -46,10 +46,11 @@ def test_app(tmp_path):
     jobs = list(base.glob("*"))
     assert len(jobs) == 2
 
-    result = runner.invoke(app, ["reached", "--config", cfg, job, "active"])
+    result = runner.invoke(app, ["reached", job, "active"])
     assert result.exit_code != 0
 
-    result = runner.invoke(app, ["reached", "--config", cfg, job, "0", "active"])
+    result = runner.invoke(app, ["reached", job, "0", "active"])
+    print(result.stdout)
     assert result.exit_code == 0
 
     result = runner.invoke(app, ["ls", "--config", cfg])
