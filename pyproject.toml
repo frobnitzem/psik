@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "psik"
+version = "0.2.0"
+description = "Portable Submission Interface for Jobs"
+authors = ["David M. Rogers <predictivestatmech@gmail.com>"]
+
+[tool.poetry.scripts]
+psik = 'psik.psik:app'
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+pydantic = "^2.1.1"
+pystache = "^0.6.5"
+typer = "^0.9.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

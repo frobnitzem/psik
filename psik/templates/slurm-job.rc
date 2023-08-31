@@ -1,0 +1,74 @@
+#!/usr/bin/env rc
+{{#job.name}}#SBATCH --job-name="{{.}}"
+{{/job.name}}
+#SBATCH --chdir="{{job.directory}}"
+{{#job.inherit_environment}}#SBATCH --export=ALL
+{{/job.inherit_environment}}
+{{^job.inherit_environment}}#SBATCH --export=NONE
+{{/job.inherit_environment}}
+
+{{#job.resources}}
+{{#duration}}#SBATCH --time={{.}}
+{{/duration}}
+{{#node_count}}#SBATCH --nodes={{.}}
+{{/node_count}}
+{{#process_count}}#SBATCH --ntasks={{.}}
+{{/process_count}}
+{{#processes_per_node}}#SBATCH --ntasks-per-node={{.}}
+{{/processes_per_node}}
+{{#gpu_cores_per_process}}#SBATCH --gpus-per-task={{.}}
+{{/gpu_cores_per_process}}
+{{!SLURM has different meanings for 'CPU', depending on the exact allocation plugin being
+   used. The default plugin uses the literal meaning for 'CPU' - physical processor. The
+   consumable resource allocation plugin, on the other hand, equates 'CPU' to a thread (if
+   hyperthreaded CPUs are used) or CPU core (for non-hyperthreaded CPUs).}}
+{{#cpu_cores_per_process}}#SBATCH --cpus-per-task={{.}}
+{{/cpu_cores_per_process}}
+{{#exclusive_node_use}}#SBATCH --exclusive
+{{/exclusive_node_use}}
+{{/job.resources}}
+
+{{#job.attributes}}
+{{#queue_name}}#SBATCH --partition="{{.}}"
+{{/queue_name}}
+{{#project_name}}#SBATCH --account="{{.}}"
+{{/project_name}}
+{{#reservation_id}}#SBATCH --reservation="{{.}}"
+{{/reservation_id}}
+{{#custom_attributes}}#SBATCH --{{key}}="{{value}}"
+{{/custom_attributes}}
+{{/job.attributes}}
+
+# setup fixed job env variables
+mpirun = srun
+nodes  = $SLURM_JOB_NUM_NODES
+jobidx = 0
+jobid  = $pid
+base   = '{{base}}'
+# nodelist = ...
+
+psik reached $base $jobidx active $jobid
+'{{base}}/scripts/on_active.rc'
+
+# what to do on failure
+fn fail {
+	psik reached $base $jobidx failed $jobid
+	'{{base}}/scripts/on_failed.rc'
+}
+fn sighup {
+    fail
+}
+fn sigint {
+    fail
+}
+fn sigalrm {
+    fail
+}
+
+'{{base}}/scripts/run'
+if(~ $status 0) {
+	psik reached $base $jobidx completed $jobid
+	'{{base}}/scripts/on_completed.rc'
+} if not {
+    fail
+}
