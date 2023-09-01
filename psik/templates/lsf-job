@@ -1,0 +1,46 @@
+#!/usr/bin/env rc
+{{#job.name}}#BSUB -J "{{.}}"
+{{/job.name}}
+{{#job.directory}}#BSUB -cwd "{{.}}"
+{{/job.directory}}
+{{#job.inherit_environment}}#BSUB -env all
+{{/job.inherit_environment}}
+{{^job.inherit_environment}}#BSUB -env none
+{{/job.inherit_environment}}
+{{#job.environment}}#BSUB -env {{name}}={{value}}
+{{/job.environment}}
+
+{{#job.resources}}
+{{#duration}}#BSUB -W {{.}}
+{{/duration}}
+{{#node_count}}#BSUB -nnodes {{.}}
+{{/node_count}}
+{{#process_count}}#BSUB -n {{.}}
+{{/process_count}}
+{{#gpu_cores_per_process}}#BSUB -gpu num={{.}}/task
+{{/gpu_cores_per_process}}
+{{/job.resources}}
+
+{{#job.attributes}}
+{{#queue_name}}#BSUB -q "{{.}}"
+{{/queue_name}}
+{{#project_name}}#BSUB -G "{{.}}"
+#BSUB -P "{{.}}"
+{{/project_name}}
+{{#reservation_id}}#BSUB -U "{{.}}"
+{{/reservation_id}}
+{{#custom_attributes.lsf}}#BSUB {{key}} "{{{value}}}"
+{{/custom_attributes.lsf}}
+{{/job.attributes}}
+#BSUB -e /dev/null
+#BSUB -o /dev/null
+
+# setup fixed job env variables
+mpirun = jsrun
+nodes = `{echo $LSB_MCPU_HOSTS | awk '{print NF/2}'}
+jobndx = $1
+jobid  = $LSB_JOBID
+base   = '{{base}}'
+# nodelist = ...
+
+{{>job_body}}

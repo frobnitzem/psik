@@ -6,6 +6,8 @@
 {{/job.inherit_environment}}
 {{^job.inherit_environment}}#SBATCH --export=NONE
 {{/job.inherit_environment}}
+{{#job.environment}}#SBATCH --export={{name}}={{value}}
+{{/job.environment}}
 
 {{#job.resources}}
 {{#duration}}#SBATCH --time={{.}}
@@ -35,15 +37,17 @@
 {{/project_name}}
 {{#reservation_id}}#SBATCH --reservation="{{.}}"
 {{/reservation_id}}
-{{#custom_attributes}}#SBATCH --{{key}}="{{value}}"
+{{#custom_attributes}}#SBATCH {{key}}="{{value}}"
 {{/custom_attributes}}
 {{/job.attributes}}
+#SBATCH -e /dev/null
+#SBATCH -o /dev/null
 
 # setup fixed job env variables
 mpirun = srun
 nodes  = $SLURM_JOB_NUM_NODES
 jobndx = $1
-jobid  = $pid
+jobid  = $SLURM_JOB_ID
 base   = '{{base}}'
 # nodelist = ...
 
