@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from psik.config import load_config, Config
-from psik.job import JobManager
+from psik.manager import JobManager
 from psik.models import JobSpec, ResourceSpec, JobAttributes
 
 cfg = """{

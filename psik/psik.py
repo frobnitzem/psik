@@ -9,7 +9,8 @@ _logger = logging.getLogger(__name__)
 import typer
 
 from .config import load_config
-from .job import JobManager, Job
+from .job import Job
+from .manager import JobManager
 from .models import JobSpec, ResourceSpec, JobAttributes, load_jobspec
 
 def setup_logging(v, vv):
@@ -59,7 +60,7 @@ def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
 
 @app.command()
 def reached(base : str = typer.Argument(..., help="Job's base directory."),
-            jobidx : int = typer.Argument(..., help="Sequential job index."),
+            jobndx : int = typer.Argument(..., help="Sequential job index."),
             state : str = typer.Argument(..., help="State reached by job."),
             info  : int = typer.Argument(default=0, help="Status code.")):
     """
@@ -68,7 +69,7 @@ def reached(base : str = typer.Argument(..., help="Job's base directory."),
     instead called during a job's (pre-filled) callbacks.
     """
     job = Job(base, read_info=False)
-    job.reached(jobidx, state, info)
+    job.reached(jobndx, state, info)
 
 @app.command()
 def ls(v : V1 = False, vv : V2 = False, cfg : CfgArg = None):

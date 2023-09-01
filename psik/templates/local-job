@@ -9,35 +9,8 @@ if(! ~ $status 0) {
 }
 nodes  = 1
 jobndx = $1
-if(~ $#jobndx 0) {
-  jobndx = -1
-}
 jobid  = $pid
 base   = '{{base}}'
 # nodelist = ...
 
-psik reached $base $jobndx active $jobid
-'{{base}}/scripts/on_active'
-
-# what to do on failure
-fn fail {
-	psik reached $base $jobndx failed $jobid
-	'{{base}}/scripts/on_failed'
-}
-fn sighup {
-    fail
-}
-fn sigint {
-    fail
-}
-fn sigalrm {
-    fail
-}
-
-'{{base}}/scripts/run' > $base/log/stdout.$jobndx
-if(~ $status 0) {
-	psik reached $base $jobndx completed $jobid
-	'{{base}}/scripts/on_completed'
-} if not {
-    fail
-}
+{{>job_body}}
