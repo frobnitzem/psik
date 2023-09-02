@@ -1,4 +1,4 @@
-from typing import Union, Dict, Tuple, List
+from typing import Union, Dict, Tuple, List, Any
 
 from pathlib import Path
 from time import sleep
@@ -6,10 +6,8 @@ from time import time as timestamp
 
 from .models import JobSpec, JobAttributes
 from .statfile import append_csv, create_file
-from .render import read_template, render_template
 from .job import Job
-
-template_types = ['submit', 'cancel', 'job']
+import psik.templates as templates
 
 class JobManager:
     """ The JobManager class manages all job (directories) listed
@@ -31,12 +29,7 @@ class JobManager:
         self.backend = self.prefix.name
         self.defaults = defaults
 
-        for act in template_types:
-            try:
-                read_template(self.backend, act)
-            except FileNotFoundError:
-                raise KeyError(f"'{self.backend}' backed is missing a template for {act}.")
-
+        templates.check(self.backend)
         assert self.prefix.is_dir(), "JobManager: prefix is not a dir"
 
     def _alloc(self, jobspec : JobSpec) -> Path:
@@ -78,19 +71,17 @@ class JobManager:
         """
         base = self._alloc(jobspec) # allocate a base dir for this job
         self._insert_defaults(jobspec.attributes)
-        templates = dict((act, read_template(self.backend, act)) \
-                          for act in ['submit', 'cancel', 'job'])
-        data = {'job': jobspec.model_dump(),
+        data : Dict[str,Any] = {
+                'job': jobspec.model_dump(),
                 'base': str(base)
                }
         custom1 = jobspec.attributes.custom_attributes.get(self.backend, {})
         custom = [ {'key': k, 'value': v} for k, v in custom1.items() ]
-        data['job']['attributes']['custom_attributes'] = custom # type: ignore[index]
+        data['job']['attributes']['custom_attributes'] = custom
 
-        for act, v in templates.items():
-            templates[act] = render_template(v, data)
+        tpl = templates.render_all(self.backend, templates.actions, data)
 
-        return create_job(base, jobspec, **templates)
+        return create_job(base, jobspec, **tpl)
 
     # populate a list of jobs
     def ls(self) -> Dict[str, Job]:

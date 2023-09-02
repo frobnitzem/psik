@@ -1,12 +1,94 @@
 [![CI](https://github.com/frobnitzem/psik/actions/workflows/python-package.yml/badge.svg)](https://github.com/frobnitzem/psik/actions)
 [![Coverage](https://codecov.io/github/frobnitzem/psik/branch/main/graph/badge.svg)](https://app.codecov.io/gh/frobnitzem/psik)
 
-# PSI/K - a Portable Submission Interface for Jobs
+# Psi\_k - a Portable Submission Interface for Jobs
 
-PSI/K is a partial implementation of the
+Psi\_k ($\Psi_k$) is a partial implementation of the
 [Exaworks Job API Spec](https://exaworks.org/job-api-spec/)
 that provides strong guarantees about callback
 execution and queue polling.
+
+## Installation and Getting Started
+
+$\Psi_k$ is a simple python package put together with
+[python-poetry](https://python-poetry.org/),
+so it's easy to install:
+
+    pip install git+https://github.com/frobnitzem/psik.git@main
+
+If you're building a package with poetry, use poetry
+add instead of pip install.
+
+Running scripts, however, also requires
+access to the `rc` shell -- a simple, lightweight sh-like
+shell that does lists right and fixes bash's known problems
+with quoting.
+
+You can download, compile, install and use the rc shell using
+[getrc.sh](https://github.com/frobnitzem/rcrc/blob/main/getrc.sh).
+To put rc into your python virtual environment, call it like,
+
+    getrc.sh $VIRTUAL_ENV
+
+
+### Configuration
+
+Psi\_K uses a json-formatted configuration file to
+store information about where its (browsable) database
+of runs are maintained, what backend to use, and what
+default attributes to apply to jobs (e.g. project\_name).
+
+The default location for this is `$HOME/.config/psik.json`,
+but it can be overridden with the `--config` option.
+
+An example configuration file is below:
+
+    {
+    "prefix": "/tmp/.psik",
+    "backend": "at",
+    "default_attr": {
+        "project_name": "project_automate",
+        "custom_attributes": {
+                "srun": {"--gpu-bind": "closest"},
+                "jsrun": {"-b": "packed:rs"}
+            }
+        }
+    }
+
+The "at" backend is more suitable for running locally,
+and uses POSIX batch command.
+There is a "local" backend the just runs processes in the background
+and is used for testing.
+Adding more backends is easy.
+
+
+## Writing a jobspec.json file
+
+The `jobspec.json` file requires, at a minimum,
+a script key, e.g.
+
+    { "name": "cowsay",
+      "script": "#!/usr/bin/env rc\necho moo\n"
+    }
+
+Other properties are listed in the
+[JobSpec datatype definition](psik/models.py).
+
+### Environment during job execution
+
+The following shell variables are defined during job execution:
+
+- mpirun -- An '\x01'-separated invocation to `JobSpec.launcher`.
+            Executing `$mpirun <programname>` (from an rc shell) or
+            `popen2(os.environ['mpirun'].split('\x01') + ['programname'])`
+            from python will launch the program across all resources
+            allocated to the job using the launcher specified.
+- nodes  -- number of nodes allocated to the job
+- base   -- base directory for psik's tracking of this job
+- jobndx -- job serial number provided at launch time
+- jobid  -- backend-specific job id for this job (if available)
+
+## How it works
 
 It provides these by introducing a strong convention
 for internal tracking of job information using
@@ -55,7 +137,9 @@ prefix/
            stderr.$jobndx - Note that jobndx is sequential from 1.
 ```
 
-Because of this, PSI/K can provide a nice command-line replacement
+## Command-Line Interface
+
+Because of this, $\Psi_k$ can provide a nice command-line replacement
 for a batch queue system that transfers across many backends:
 
     % psik --help
@@ -73,7 +157,7 @@ for a batch queue system that transfers across many backends:
 
 Compared to another implementation of a portable API spec,
 [PSI/J](https://exaworks.org/psij-python/#docs),
-PSI/K uses mostly the same key data models, with a few changes
+Psi\_k uses mostly the same key data models, with a few changes
 to the data model, and three changes to the execution semantics:
 
 1. Callback scripts are inserted into job.rc rather than polling the backend.
@@ -103,7 +187,7 @@ to the data model, and three changes to the execution semantics:
 Stdin/stdout/stderr paths have been removed.  All input
 and output files are captured in a well-known location.
 
-Instead of script file paths, the PSI/K JobSpec accepts
+Instead of script file paths, the $\Psi_k$ JobSpec accepts
 full scripts and arranges to write them to well-known locations (see above).
 The execution semantics is changed because `script` is not
 launched inside the specified launcher.  Instead, `script`
@@ -112,7 +196,7 @@ several environment variables so it can arrange parallel
 execution itself.  See (`Environment during job execution`) below.
 
 The `events` tag is also new.  Rather than polling a job-queue
-backent, PSI/K inserts calls to the job's `scripts/on_{event}`
+backend, $\Psi_k$ inserts calls to the job's `scripts/on_{event}`
 scripts each time a job changes state.  These scripts
 are pre-filled with scripts from `JobSpec.events`, when
 they exist.  It is also possible for a user to modify the
@@ -123,7 +207,9 @@ The `ResourceSpec` and `JobAttributes` models are identical, except
 `duration` has been fixed as required job-time in units of minutes,
 and moved out of `JobAttributes` and into `ResourceSpec`.
 
-Internally, PSI/K implements each backend by including three templates:
+## Adding a new batch queue backend do Psi\_k
+
+Internally, $\Psi_k$ implements each backend by including three templates:
 
 psik/templates/
  * `<backend>-submit`  -- Submit a job to the queue.
@@ -142,41 +228,3 @@ psik/templates/
                           Must call psik logging and callbacks
                           at appropriate points.
 
-## Environment during job execution
-
-The following shell variables are defined during job execution:
-
-- mpirun -- An '\x01'-separated invocation to `JobSpec.launcher`.
-            Executing `$mpirun <programname>` (from an rc shell) or
-            `popen2(os.environ['mpirun'].split('\x01') + ['programname'])`
-            from python will launch the program across all resources
-            allocated to the job using the launcher specified.
-- nodes  -- number of nodes allocated to the job
-- base   -- base directory for psik's tracking of this job
-- jobndx -- job serial number provided at launch time
-- jobid  -- backend-specific job id for this job
-
-
-## Configuration
-
-PSI/K uses a json-formatted configuration file to
-store information about where run directories are maintained,
-what backend to use, and what default attributes to apply
-to jobs (e.g. project\_name).
-
-The default location for this is `$HOME/.config/psik.json`,
-but it can be overridden with the `--config` option.
-
-An example configuration file is below:
-
-    {
-    "prefix": "/tmp/.psik",
-    "backend": "local",
-    "default_attr": {
-        "project_name": "project_automate",
-        "custom_attributes": {
-                "srun": {"--gpu-bind": "closest"},
-                "jsrun": {"-b": "packed:rs"}
-            }
-        }
-    }
