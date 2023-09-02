@@ -15,9 +15,9 @@ fn sigalrm fail
 
 $base/scripts/run >$base/log/stdout.$jobndx \
 				  >[2]$base/log/stderr.$jobndx
-if(~ $status 0) {
-	psik reached $base $jobndx completed $jobid
-	$base/scripts/on_completed
-} if not {
+if(! ~ $status '' 0) {
     fail
 }
+
+psik reached $base $jobndx completed $jobid
+$base/scripts/on_completed
