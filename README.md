@@ -1,3 +1,4 @@
+![CI](https://github.com/frobnitzem/psik/actions/workflows/python-package.yml/badge.svg)
 # PSI/K - a Portable Submission Interface for Jobs
 
 PSI/K is a partial implementation of the
