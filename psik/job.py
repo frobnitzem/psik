@@ -1,4 +1,4 @@
-from typing import Union, Dict, Tuple, List, Optional
+from typing import Union, Dict, Tuple, List, Optional, Set
 from io import StringIO
 import logging
 _logger = logging.getLogger(__name__)
@@ -7,65 +7,81 @@ import asyncio
 from pathlib import Path
 from time import time as timestamp
 
-from .models import JobSpec
+from anyio import Path as aPath
+
+from .models import JobSpec, JobState
 from .statfile import read_csv, append_csv
 
 class Job:
-    def __init__(self, base : Union[str, Path], read_info=True):
-        """ Note: read_info must be True unless you
-            only plan to call reached() and nothing else.
+    def __init__(self, base : Union[str, Path, aPath]):
+        """ Note: This class is not fully initialized
+                  with actual job metadata until it is `await`-ed.
         """
-        base = Path(base)
+        base = aPath(base)
         self.base = base
         self.stamp = str(base.name)
 
         self.valid = False
         self.spec = JobSpec(script="")
-        self.history : List[Tuple[float,int,str,int]] = []
+        self.history : List[Tuple[float,int,JobState,int]] = []
 
-        if read_info:
-            self.read_info()
+    # Await this class to read metadata from the filesystem.
+    def __await__(self):
+        return self.read_info().__await__()
 
-    def read_info(self):
+    async def read_info(self) -> 'Job':
+        """ Asynchronously read all job metadata from the filesystem.
+        """
         base = self.base
-        spec = (base/'spec.json').read_text(encoding='utf-8')
+        spec = await (base/'spec.json').read_text(encoding='utf-8')
         self.spec = JobSpec.model_validate_json(spec)
-        history = read_csv(base / 'status.csv')
+        history = await read_csv(base / 'status.csv')
         self.history = self.history[:0]
         for step in history: # parse history
-            self.history.append( (
-                    float(step[0]), int(step[1]), step[2], int(step[3])) )
+            try:
+                self.history.append(( float(step[0]), int(step[1]),
+                                      JobState(step[2]), int(step[3]) ))
+            except Exception as e:
+                _logger.error("%s: Invalid row in status.csv: %s",
+                              self.stamp, step)
         self.valid = True
+        return self
 
-    def reached(self, jobndx : int, state : str, info=0):
+    async def reached(self, jobndx : int, state : JobState,
+                      info : int = 0) -> bool:
         """ Mark job as having reached the given state.
             info is usually the job_id (when known).
         """
         t = timestamp()
-        data = (t, jobndx, state, info)
+        data  = (t, jobndx, state, info)
+        data1 = (t, jobndx, state.value, info)
         self.history.append( data )
-        append_csv(self.base / 'status.csv', *data)
+        await append_csv(self.base / 'status.csv', *data1)
+        return True
 
-    def summarize(self):
+    def summarize(self) -> Tuple[int, Dict[JobState, Set[int]]]:
+        """ Sort jobndx values by JobState.
+            
+            returns (next available jobndx, mapping from state to jobndx)
+        """
         jobndx = 1
 
-        status = {
-            'queued'    : set(),
-            'active'    : set(),
-            'cancelled' : set(),
-            'failed'    : set(),
-            'completed' : set()
-        }
+        status : Dict[JobState, Set[int]] = \
+                 dict( (s, set()) for s in JobState )
+        del status[JobState.new]
         for t, ndx, state, info in self.history:
             if ndx >= jobndx:
                 jobndx = ndx+1
             if state in status:
                 status[state].add(ndx)
 
-        status['queued'] -= status['active']
-        status['active'] -= status['cancelled'] \
-                          | status['failed']    \
-                          | status['completed']
+        # TODO: sanity checks to ensure jobs passed through queued
+        # before reaching other states, cancelled/failed/completed
+        done = status[JobState.canceled] \
+             | status[JobState.failed]    \
+             | status[JobState.completed]
+        status[JobState.queued] -= status[JobState.active] | done
+        status[JobState.active] -= done
         return jobndx, status
 
     async def submit(self) -> bool:
@@ -73,10 +89,10 @@ class Job:
            and then the submit script.
         """
         if not self.valid:
-            self.read_info()
+            await self.read_info()
 
         pre_submit = self.base / 'scripts' / 'pre_submit'
-        if len(self.history) == 1 and pre_submit.exists():
+        if len(self.history) == 1 and await pre_submit.is_file():
             ret, out, err = await runcmd(str(pre_submit))
         if ret != 0:
             return False
@@ -91,30 +107,32 @@ class Job:
         except Exception:
             _logger.error('%s: submit script returned unparsable result', self.stamp)
             native_job_id = -1
-        self.reached(jobndx, 'queued', native_job_id)
-        return True
+        return await self.reached(jobndx, JobState.queued, native_job_id)
 
     async def cancel(self) -> bool:
         # Prevent a race condition by recording this first.
-        self.reached(0, 'canceled')
-        self.read_info()
+        ok = await self.reached(0, JobState.canceled)
+        if not ok:
+            return False
+        await self.read_info()
 
         native_ids = {}
         for t, ndx, state, info in self.history:
-            if state == 'queued':
+            if state == JobState.queued:
                 native_ids[ndx] = info
-            elif state == 'completed':
+            elif state == JobState.completed:
                 del native_ids[ndx]
-            elif state == 'failed':
+            elif state == JobState.failed:
                 del native_ids[ndx]
 
         ids = [str(job_id) for ndx, job_id in native_ids.items()]
         if len(ids) > 0:
-            ret, out, err = await runcmd(str(self.base / 'scripts' / 'cancel'), *ids)
+            ret, out, err = await runcmd(str(self.base / 'scripts' / 'cancel'),
+                                         *ids)
             if ret != 0:
                 return False
         on_canceled = self.base / 'scripts' / 'on_canceled'
-        if on_canceled.exists():
+        if await on_canceled.is_file():
             ret, out, err = await runcmd(str(on_canceled))
         return ret == 0
 

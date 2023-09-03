@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from psik import __version__
@@ -35,25 +36,26 @@ def test_app(tmp_path):
     cfg = str(cfg)
     spec = str(spec)
 
-    result = runner.invoke(app, ["run", "--config", cfg, "--test", spec])
+    result = runner.invoke(app, ["run", "--config", cfg, "--no-submit", spec])
     print(result.stdout)
     assert result.exit_code == 0
 
-    jobs = list(base.glob("*"))
+    jobs = list(base.iterdir())
     assert len(jobs) == 1
-    job1 = jobs[0]
-    job = str(job1)
+    jobname = str(jobs[0])
+    job = str(base / jobname)
 
     result = runner.invoke(app, ["run", "--config", cfg, spec])
     print(result.stdout)
     assert result.exit_code == 0
-    jobs = list(base.glob("*"))
+    jobs = list(base.iterdir())
     assert len(jobs) == 2
 
     result = runner.invoke(app, ["reached", job, "active"])
     assert result.exit_code != 0
 
     result = runner.invoke(app, ["reached", job, "0", "active"])
+    print(job, "active")
     print(result.stdout)
     assert result.exit_code == 0
 
@@ -65,5 +67,5 @@ def test_app(tmp_path):
     assert result.exit_code == 0
     assert result.stdout.count('\n') >= 2
 
-    result = runner.invoke(app, ["status", "--config", cfg, job1.name])
+    result = runner.invoke(app, ["status", "--config", cfg, jobname])
     assert result.exit_code == 0

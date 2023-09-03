@@ -1,10 +1,14 @@
 from typing import Union, Dict, Tuple, List, Any
+from collections.abc import AsyncIterator
 import logging
 _logger = logging.getLogger(__name__)
 
+import os
 from pathlib import Path
-from time import sleep
+from asyncio import sleep
 from time import time as timestamp
+
+from anyio import Path as aPath
 
 from .models import JobSpec, JobAttributes
 from .statfile import append_csv, create_file
@@ -26,35 +30,43 @@ class JobManager:
     """
     def __init__(self, prefix : Union[str,Path],
                        defaults : JobAttributes = JobAttributes()):
-        self.prefix = Path(prefix).resolve()
-        # TODO: assert prefix is writable
-        self.backend = self.prefix.name
+        prefix = Path(prefix).resolve()
+        self.backend = prefix.name
         self.defaults = defaults
 
         templates.check(self.backend)
-        assert self.prefix.is_dir(), "JobManager: prefix is not a dir"
+        assert prefix.is_dir(), "JobManager: prefix is not a dir"
+        assert os.access(prefix, os.W_OK)
+        self.prefix = aPath(prefix)
 
-    def _alloc(self, jobspec : JobSpec) -> Path:
+    async def _alloc(self, jobspec : JobSpec) -> aPath:
         """Allocate a new path where a job can be created.
 
            Set jobspec.directory if None.
         """
         while True:
-            base = self.prefix / str(round(timestamp(), 3))
+            # Note: This naming convention limits jobs to 1000/second
+            # which is probably too many actually.
+            base = self.prefix / ("%.3f"%round(timestamp(), 3))
             try:
-                base.mkdir()
+                await base.mkdir()
                 break
             except FileExistsError:
-                sleep(0.001)
+                await sleep(0.001)
 
+        # Ensure working directory exists.
         if jobspec.directory is None:
             workdir = base / 'work'
-            workdir.mkdir()
+            await workdir.mkdir()
             jobspec.directory = str(workdir)
 
         return base
 
-    def _insert_defaults(self, attr : JobAttributes):
+    def _insert_defaults(self, attr : JobAttributes) -> None:
+        """ Merge JobManager.defaults into .defaults into
+            the JobAttributes structure.  This way JobSpec-s
+            don't have to keep entering their project-id, etc.
+        """
         for key, val in attr.model_dump().items():
             if val is None:
                 val = getattr(self.defaults, key)
@@ -65,39 +77,45 @@ class JobManager:
                 attr.custom_attributes.update(
                         self.defaults.custom_attributes)
 
-    def create(self, jobspec : JobSpec) -> Job:
+    async def create(self, jobspec : JobSpec) -> Job:
         """Create a new job from the given JobSpec
 
            This function renders job templates,
            then calls create_job.
         """
-        base = self._alloc(jobspec) # allocate a base dir for this job
+        base = await self._alloc(jobspec) # allocate a base dir for this job
         self._insert_defaults(jobspec.attributes)
         data : Dict[str,Any] = {
                 'job': jobspec.model_dump(),
                 'base': str(base)
                }
+        #  Replaces `data[job.attributes.custom_attributes]`
+        #  with its key/val pairs specific to the backend in use.
         custom1 = jobspec.attributes.custom_attributes.get(self.backend, {})
         custom = [ {'key': k, 'value': v} for k, v in custom1.items() ]
         data['job']['attributes']['custom_attributes'] = custom
+        
+        # Ensure job-script begins with a shebang. Add one if not.
+        if not data['job']['script'].startswith("#!"):
+            data['job']['script'] = "#!/usr/bin/env rc\n" \
+                                  + data['job']['script']
 
         tpl = templates.render_all(self.backend, templates.actions, data)
 
-        return create_job(base, jobspec, **tpl)
+        return await create_job(base, jobspec, **tpl)
 
-    # populate a list of jobs
-    def ls(self) -> Dict[str, Job]:
-        jobs = {}
-        for jobdir in self.prefix.glob("*"):
-            if (jobdir / 'spec.json').exists():
+    async def ls(self) -> AsyncIterator[Job]:
+        """ Async generator of Job entries.
+        """
+        async for jobdir in self.prefix.iterdir():
+            if await (jobdir / 'spec.json').is_file():
                 try:
-                    jobs[jobdir.name] = Job(jobdir)
+                    yield await Job(jobdir)
                 except Exception as e:
                     _logger.info("Unable to load %s", jobdir, exc_info=e)
-        return jobs
 
-def create_job(base : Path, jobspec : JobSpec,
-               submit : str, cancel : str, job : str) -> Job:
+async def create_job(base : aPath, jobspec : JobSpec,
+                     submit : str, cancel : str, job : str) -> Job:
     """ Create job files from layout info.
 
             Fills out the "base / " subdirectory:
@@ -106,23 +124,24 @@ def create_job(base : Path, jobspec : JobSpec,
                - scripts/(pre_submit on_* submit cancel job run)
                - empty work/ and log/ directories
     """
-    assert base.is_dir()
-    assert jobspec.directory is not None and Path(jobspec.directory).is_dir()
-    (base/'scripts').mkdir()
-    (base/'log').mkdir()
-    create_file(base/'spec.json', jobspec.model_dump_json(indent=4), 0o644)
-    create_file(base/'scripts'/'submit', submit, 0o755)
-    create_file(base/'scripts'/'cancel', cancel, 0o755)
-    create_file(base/'scripts'/'job', job, 0o755)
-    create_file(base/'scripts'/'run', jobspec.script, 0o755)
+    assert await base.is_dir()
+    assert jobspec.directory is not None and \
+            await aPath(jobspec.directory).is_dir()
+    await (base/'scripts').mkdir()
+    await (base/'log').mkdir()
+    await create_file(base/'spec.json', jobspec.model_dump_json(indent=4), 0o644)
+    await create_file(base/'scripts'/'submit', submit, 0o755)
+    await create_file(base/'scripts'/'cancel', cancel, 0o755)
+    await create_file(base/'scripts'/'job', job, 0o755)
+    await create_file(base/'scripts'/'run', jobspec.script, 0o755)
     #(base/'scripts'/'run').unlink(missing_ok=True)
     default_action = "#!/usr/bin/env rc\n"
     for state in ["active", "completed", "failed", "canceled"]:
-        create_file(base/'scripts'/f'on_{state}',
-                    default_action, 0o755)
-    create_file(base/'scripts'/f'pre_submit', default_action, 0o755)
+        await create_file(base/'scripts'/f'on_{state}',
+                          default_action, 0o755)
+    await create_file(base/'scripts'/f'pre_submit', default_action, 0o755)
     # TODO: put in special on_active and on_completed hooks
     #
     # log completion of 'new' status
-    append_csv(base/'status.csv', timestamp(), 0, 'new', 0)
-    return Job(base)
+    await append_csv(base/'status.csv', timestamp(), 0, 'new', 0)
+    return await Job(base)

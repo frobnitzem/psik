@@ -20,7 +20,7 @@ async def test_at(tmp_path):
                echo rawr >lion
            """)
 
-    job = mgr.create(spec)
+    job = await mgr.create(spec)
     ok = await job.submit()
     assert ok
     assert len(job.history) == 2 # new, queued
