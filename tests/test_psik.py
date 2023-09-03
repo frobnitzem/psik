@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 import pytest
 from typer.testing import CliRunner
@@ -45,7 +46,7 @@ def test_app(tmp_path):
     jobname = str(jobs[0])
     job = str(base / jobname)
 
-    result = runner.invoke(app, ["run", "--config", cfg, spec])
+    result = runner.invoke(app, ["run", "-v", "--config", cfg, spec])
     print(result.stdout)
     assert result.exit_code == 0
     jobs = list(base.iterdir())
@@ -59,13 +60,28 @@ def test_app(tmp_path):
     print(result.stdout)
     assert result.exit_code == 0
 
-    result = runner.invoke(app, ["cancel", job])
+    result = runner.invoke(app, ["cancel", "-vv", job])
     print(result.stdout)
     assert result.exit_code == 0
 
-    result = runner.invoke(app, ["ls", "--config", cfg])
+    os.environ['PSIK_CONFIG'] = cfg
+    result = runner.invoke(app, ["ls"])
     assert result.exit_code == 0
     assert result.stdout.count('\n') >= 2
 
     result = runner.invoke(app, ["status", "--config", cfg, jobname])
+    assert result.exit_code == 0
+
+    result = runner.invoke(app, ["rm", "--config", cfg, 'test'])
+    assert result.exit_code == 1
+
+    result = runner.invoke(app, ["rm", "--config", cfg, str(jobs[0])])
+    assert result.exit_code == 0
+
+    (base/jobs[1]).chmod(0o500)
+    result = runner.invoke(app, ["rm", "--config", cfg, str(jobs[1])])
+    assert result.exit_code == 1
+
+    (base/jobs[1]).chmod(0o700)
+    result = runner.invoke(app, ["rm", "--config", cfg, str(jobs[1])])
     assert result.exit_code == 0

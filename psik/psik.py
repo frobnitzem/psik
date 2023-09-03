@@ -1,8 +1,10 @@
 import asyncio
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 from typing_extensions import Annotated
 import sys
+import os
+import shutil
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ app = typer.Typer()
 V1 = Annotated[bool, typer.Option("-v", help="show info-level logs")]
 V2 = Annotated[bool, typer.Option("-vv", help="show debug-level logs")]
 CfgArg = Annotated[Optional[Path], typer.Option("--config",
+                   envvar="PSIK_CONFIG",
                    help="Config file path [default ~/.config/psik.json].")]
 
 @app.command()
@@ -55,6 +58,33 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
         for line in job.history:
             print("%.3f %3d %10s %8d" % line)
     run_async(stat())
+
+@app.command()
+def rm(stamps : List[str] = typer.Argument(...,
+                                           help="Job's timestamp / handle."),
+       cfg : CfgArg = None):
+    """
+    Remove all job info.
+    """
+    config = load_config(cfg)
+    base = Path(config.prefix) / config.backend
+    # TODO: Check with the backend and prevent deletion if
+    # job is still there.
+
+    err = 0
+    for stamp in stamps:
+        jobdir = base / str(stamp)
+        if not jobdir.is_dir():
+            _logger.error("%s not found", jobdir)
+            err += 1
+            continue
+        if not os.access(jobdir, os.W_OK):
+            _logger.error("%s no write permissions", jobdir)
+            err += 1
+            continue
+        shutil.rmtree(jobdir)
+
+    raise typer.Exit(code=err)
 
 @app.command()
 def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),

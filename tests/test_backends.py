@@ -4,6 +4,11 @@ import pytest
 from psik.manager import JobManager
 from psik.models import JobSpec
 from psik.config import load_config
+from psik.templates import list_backends
+
+def test_backends():
+    backends = list_backends()
+    assert len(backends) >= 4
 
 @pytest.mark.skipif(sys.platform == 'darwin', reason="OSX eschews batch/at")
 @pytest.mark.asyncio
