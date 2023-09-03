@@ -35,8 +35,10 @@ class JobSpec(BaseModel):
     environment : Dict[str,str] = Field(default={},title="custom environment variables")
     inherit_environment : bool = Field(default=True, title="If this flag is set to False, the job starts with an empty environment.")
 
-    resources : ResourceSpec = Field(default=ResourceSpec(), title="Job resource requirements")
-    attributes : JobAttributes = Field(default=JobAttributes(), title="Time and job labels")
+    resources   : ResourceSpec = Field(default=ResourceSpec(), title="Job resource requirements")
+    attributes  : JobAttributes = Field(default=JobAttributes(), title="Time and job labels")
+    pre_submit  : str = Field(default="", title="Run before submitting job.rc, but only when the job state is `new`.")
+    events      : Dict[JobState, str] = Field(default={}, title="callbacks")
 
 #j = JobSpec(script="mpirun hostname")
 #print(j.json())

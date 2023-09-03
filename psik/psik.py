@@ -64,7 +64,7 @@ def rm(stamps : List[str] = typer.Argument(...,
                                            help="Job's timestamp / handle."),
        cfg : CfgArg = None):
     """
-    Remove all job info.
+    Remove job tracking directories for the given jobstamps.
     """
     config = load_config(cfg)
     base = Path(config.prefix) / config.backend

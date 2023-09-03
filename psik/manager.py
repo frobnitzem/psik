@@ -10,7 +10,7 @@ from time import time as timestamp
 
 from anyio import Path as aPath
 
-from .models import JobSpec, JobAttributes
+from .models import JobSpec, JobAttributes, JobState
 from .statfile import append_csv, create_file
 from .job import Job
 import psik.templates as templates
@@ -97,11 +97,6 @@ class JobManager:
         custom = [ {'key': k, 'value': v} for k, v in custom1.items() ]
         data['job']['attributes']['custom_attributes'] = custom
         
-        # Ensure job-script begins with a shebang. Add one if not.
-        if not data['job']['script'].startswith("#!"):
-            data['job']['script'] = "#!/usr/bin/env rc\n" \
-                                  + data['job']['script']
-
         tpl = templates.render_all(self.backend, templates.actions, data)
 
         return await create_job(base, jobspec, **tpl)
@@ -135,15 +130,24 @@ async def create_job(base : aPath, jobspec : JobSpec,
     await create_file(base/'scripts'/'submit', submit, 0o755)
     await create_file(base/'scripts'/'cancel', cancel, 0o755)
     await create_file(base/'scripts'/'job', job, 0o755)
-    await create_file(base/'scripts'/'run', jobspec.script, 0o755)
+    await create_file(base/'scripts'/'run',
+                      prepare_script(jobspec.script), 0o755)
     #(base/'scripts'/'run').unlink(missing_ok=True)
     default_action = "#!/usr/bin/env rc\n"
-    for state in ["active", "completed", "failed", "canceled"]:
+    for state in [JobState.active, JobState.completed,
+                  JobState.failed, JobState.canceled]:
+        action = jobspec.events.get(state, default_action)
         await create_file(base/'scripts'/f'on_{state}',
-                          default_action, 0o755)
-    await create_file(base/'scripts'/f'pre_submit', default_action, 0o755)
-    # TODO: put in special on_active and on_completed hooks
-    #
+                          prepare_script(action), 0o755)
+    await create_file(base/'scripts'/'pre_submit',
+                      prepare_script(jobspec.pre_submit), 0o755)
     # log completion of 'new' status
     await append_csv(base/'status.csv', timestamp(), 0, 'new', 0)
     return await Job(base)
+
+def prepare_script(s):
+    if not s.startswith("#!"):
+        s = "#!/usr/bin/env rc\n" + s
+    if not s.endswith("\n"):
+        s = s + "\n"
+    return s

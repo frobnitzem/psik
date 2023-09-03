@@ -14,8 +14,12 @@ from .statfile import read_csv, append_csv
 
 class Job:
     def __init__(self, base : Union[str, Path, aPath]):
-        """ Note: This class is not fully initialized
+        """ Construct a job from the information
+            in its base directory (filesystem path).
+
+            Note: This class is not fully initialized
                   with actual job metadata until it is `await`-ed.
+                  This allows for all I/O to be asynchronous.
         """
         base = aPath(base)
         self.base = base

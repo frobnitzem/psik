@@ -39,7 +39,8 @@ of runs are maintained, what backend to use, and what
 default attributes to apply to jobs (e.g. project\_name).
 
 The default location for this is `$HOME/.config/psik.json`,
-but it can be overridden with the `--config` option.
+but it can be overridden with the `--config` option,
+or the `PSIK_CONFIG` environment variable.
 
 An example configuration file is below:
 
@@ -65,18 +66,19 @@ Adding more backends is easy.
 ## Writing a jobspec.json file
 
 The `jobspec.json` file requires, at a minimum,
-a script key, e.g.
+a script, e.g.
 
     { "name": "cowsay",
       "script": "#!/usr/bin/env rc\necho moo\n"
     }
 
-Other properties are listed in the
+Other properties (like a `ResourceSpec`) are listed in the
 [JobSpec datatype definition](psik/models.py).
 
 ### Environment during job execution
 
-The following shell variables are defined during job execution:
+When writing scripts, it's helpful to know that
+the following shell variables are defined during job execution:
 
 - mpirun -- An '\x01'-separated invocation to `JobSpec.launcher`.
             Executing `$mpirun <programname>` (from an rc shell) or
@@ -88,11 +90,11 @@ The following shell variables are defined during job execution:
 - jobndx -- job serial number provided at launch time
 - jobid  -- backend-specific job id for this job (if available)
 
+
 ## How it works
 
-It provides these by introducing a strong convention
-for internal tracking of job information using
-a directory tree:
+Psi\_k provides job tracking by adhering to a strong convention
+for storing information about each job using a directory tree:
 
 ```
 prefix/
@@ -149,8 +151,52 @@ for a batch queue system that transfers across many backends:
       cancel   Cancel a job.
       ls       List jobs.
       reached  Record that a job has entered the given state.
-      run      Run a job from a jobspec.json file.
+      rm       Remove job tracking directories for the given jobstamps.
+      run      Create a job directory from a jobspec.json file.
       status   Read job status information and history.
+
+## Python interface
+
+Psi\_k can also be used as a python package:
+
+    from psik import JobManager, JobSpec, JobAttributes, ResourceSpec
+
+    mgr = JobManager("/proj/SB1/.psik", "slurm",
+                     defaults = JobAttributes(queue_name = "batch",
+                                              project_name = "plaid"))
+    rspec = ResourceSpec(duration = "60",
+                         process_count = 2,
+                         gpu_cores_per_process=1
+                        )
+    spec = JobSpec(name = "machine info",
+                   script = """hostname; pwd;
+                               cat /proc/cpuinfo /proc/meminfo
+                               nvidia-smi
+                               echo $mpirun,$nodes,$base,$jobndx,$jobid
+                            """,
+                   resources = rspec
+                  )
+    job = await mgr.create(spec)
+    await job.submit()
+
+    # Three redundant ways to check on job status:
+
+    ## Read job status updates directly from the filesystem.
+    print( await (job.base/'status.csv').read_text() )
+
+    ## Reload job information from its file path.
+    await job.read_info()
+    print( job.history )
+
+    ## Re-initialize / clone the Job from its file path.
+    job = await Job(job.base)
+    print( job.history )
+
+This example shows most of the useful settings for
+JobSpec information -- which makes up a majority of the code.
+Other than `script`, all job information is optional.
+However, the backend may reject jobs without enough
+resource and queue metadata.
 
 
 ## Comparison
@@ -170,7 +216,7 @@ to the data model, and three changes to the execution semantics:
   - ~~executable~~
   - ~~arguments~~
   - _script_ -- executable plus arguments have been replaced with script
-  - directory : str
+  - directory : Optional[str] -- defaults to `<job base>`/work
   - inherit\_environment : bool = True
   - environment : Dict[str,str] = {}
   - ~~stdin\_path~~
@@ -181,8 +227,8 @@ to the data model, and three changes to the execution semantics:
   - ~~pre\_launch~~
   - _pre\_submit_ : str -- pre\_launch has been replaced with pre\_submit. It is a script, not a filename. It is run before submitting job.rc (when the job state is `new`).
   - ~~post\_launch~~
-  - launcher=None
-  - _events_ : Dict[JobState : str] = {} -- callbacks
+  - launcher = None
+  - _events_ : Dict[JobState, str] = {} -- callbacks
 
 Stdin/stdout/stderr paths have been removed.  All input
 and output files are captured in a well-known location.
