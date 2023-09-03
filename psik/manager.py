@@ -28,16 +28,18 @@ class JobManager:
         If set, default job attributes are filled in for
         all jobs that do not have those attributes set already.
     """
-    def __init__(self, prefix : Union[str,Path],
+    def __init__(self, prefix : Union[str,Path], backend : str,
                        defaults : JobAttributes = JobAttributes()):
-        prefix = Path(prefix).resolve()
-        self.backend = prefix.name
+        assert backend.count("/") == 0 and backend.count("\\") == 0, \
+                    "Invalid backend name."
+        pre = (Path(prefix) / backend).resolve()
+        self.backend  = backend
         self.defaults = defaults
 
-        templates.check(self.backend)
-        assert prefix.is_dir(), "JobManager: prefix is not a dir"
-        assert os.access(prefix, os.W_OK)
-        self.prefix = aPath(prefix)
+        templates.check(self.backend) # verify all templates are present
+        assert pre.is_dir(), "JobManager: prefix is not a dir"
+        assert os.access(pre, os.W_OK)
+        self.prefix = aPath(pre)
 
     async def _alloc(self, jobspec : JobSpec) -> aPath:
         """Allocate a new path where a job can be created.

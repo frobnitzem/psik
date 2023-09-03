@@ -17,7 +17,7 @@ async def test_at(tmp_path):
     base = tmp_path/backend
     base.mkdir()
 
-    mgr = JobManager(base)
+    mgr = JobManager(tmp_path, backend)
     spec = JobSpec(name="hello",
                script = """#!/usr/bin/env rc
                echo Look out! >[1=2]

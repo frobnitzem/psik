@@ -39,7 +39,7 @@ async def test_create(tmp_path):
     base = Path(config.prefix) / config.backend
     assert base.is_dir()
 
-    mgr = JobManager(base)
+    mgr = JobManager(config.prefix, config.backend)
     spec = JobSpec(
                 name = "foo",
                 script = "hostname",

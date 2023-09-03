@@ -123,9 +123,8 @@ def ls(v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    base = Path(config.prefix) / config.backend
-
-    mgr = JobManager(base, defaults = config.default_attr)
+    mgr = JobManager(config.prefix, config.backend,
+                     defaults = config.default_attr)
     async def show():
         async for job in mgr.ls():
             t, ndx, state, info = job.history[-1]
@@ -144,9 +143,8 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    base = Path(config.prefix) / config.backend
-
-    mgr = JobManager(base, defaults = config.default_attr)
+    mgr = JobManager(config.prefix, config.backend,
+                     defaults = config.default_attr)
     try:
         spec = load_jobspec(jobspec)
     except Exception as e:
