@@ -1,4 +1,5 @@
-from typing import Union, Dict, Tuple, List
+from typing import Union, Dict, Tuple, List, Optional
+from io import StringIO
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -76,18 +77,20 @@ class Job:
 
         pre_submit = self.base / 'scripts' / 'pre_submit'
         if len(self.history) == 1 and pre_submit.exists():
-            out = await runcmd(str(pre_submit))
-        if isinstance(out, int):
-            _logger.error('Error in pre_submit script.')
+            ret, out, err = await runcmd(str(pre_submit))
+        if ret != 0:
             return False
 
         jobndx, _ = self.summarize()
 
-        out = await runcmd(str(self.base / 'scripts' / 'submit'), str(jobndx))
-        if isinstance(out, int):
-            _logger.error('Error submitting job.')
+        ret, out, err = await runcmd(str(self.base / 'scripts' / 'submit'), str(jobndx))
+        if ret != 0:
             return False
-        native_job_id = int(out)
+        try:
+            native_job_id = int(out)
+        except Exception:
+            _logger.error('%s: submit script returned unparsable result', self.stamp)
+            native_job_id = -1
         self.reached(jobndx, 'queued', native_job_id)
         return True
 
@@ -107,38 +110,40 @@ class Job:
 
         ids = [str(job_id) for ndx, job_id in native_ids.items()]
         if len(ids) > 0:
-            out = await runcmd(str(self.base / 'scripts' / 'cancel'), *ids)
-            if isinstance(out, int):
-                _logger.error('cancel script returned %d', out)
+            ret, out, err = await runcmd(str(self.base / 'scripts' / 'cancel'), *ids)
+            if ret != 0:
                 return False
         on_canceled = self.base / 'scripts' / 'on_canceled'
         if on_canceled.exists():
-            out = await runcmd(str(on_canceled))
-        if isinstance(out, int):
-            _logger.error('on_canceled callback returned %d', out)
-            return False
-        return True
+            ret, out, err = await runcmd(str(on_canceled))
+        return ret == 0
 
-async def runcmd(prog, *args, ret=True, outfile=None):
+async def runcmd(prog : Union[Path,str], *args : str,
+                 expect_ok : Optional[bool] = True) -> Tuple[int,str,str]:
     """Run the given command inside an asyncio subprocess.
+       
+       Returns (return code : int, stdout : str, stderr : str)
     """
-    stdout = None
-    stderr = None
-    if ret:
-        stdout = asyncio.subprocess.PIPE
-    if outfile:
-        # TODO: consider https://pypi.org/project/aiofiles/
-        f = open(outfile, 'ab')
-        stdout = f
-        stderr = f
+    pipe = asyncio.subprocess.PIPE
     proc = await asyncio.create_subprocess_exec(
                     prog, *args,
-                    stdout=stdout, stderr=stderr)
+                    stdout=pipe, stderr=pipe)
     stdout, stderr = await proc.communicate()
     # note stdout/stderr are binary
-    if outfile:
-        f.close()
 
-    if ret and proc.returncode == 0:
-        return stdout
-    return proc.returncode
+    out = stdout.decode('utf-8')
+    err = stderr.decode('utf-8')
+    if len(stdout) > 0:
+        _logger.debug('%s stdout: %s', prog, out)
+    if len(stderr) > 0:
+        _logger.info('%s stderr: %s', prog, err)
+
+    ret = -1
+    if proc.returncode is not None:
+        ret = proc.returncode
+    if expect_ok != (proc.returncode == 0):
+        _logger.error('%s returned %d', prog, ret)
+    if expect_ok is None:
+        _logger.info('%s returned %d', prog, ret)
+
+    return ret, out, err
