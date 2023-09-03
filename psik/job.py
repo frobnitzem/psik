@@ -1,4 +1,6 @@
 from typing import Union, Dict, Tuple, List
+import logging
+_logger = logging.getLogger(__name__)
 
 import asyncio
 from pathlib import Path
@@ -28,6 +30,7 @@ class Job:
         spec = (base/'spec.json').read_text(encoding='utf-8')
         self.spec = JobSpec.model_validate_json(spec)
         history = read_csv(base / 'status.csv')
+        self.history = self.history[:0]
         for step in history: # parse history
             self.history.append( (
                     float(step[0]), int(step[1]), step[2], int(step[3])) )
@@ -71,17 +74,18 @@ class Job:
         if not self.valid:
             self.read_info()
 
-
         pre_submit = self.base / 'scripts' / 'pre_submit'
         if len(self.history) == 1 and pre_submit.exists():
             out = await runcmd(str(pre_submit))
         if isinstance(out, int):
+            _logger.error('Error in pre_submit script.')
             return False
 
         jobndx, _ = self.summarize()
 
         out = await runcmd(str(self.base / 'scripts' / 'submit'), str(jobndx))
         if isinstance(out, int):
+            _logger.error('Error submitting job.')
             return False
         native_job_id = int(out)
         self.reached(jobndx, 'queued', native_job_id)
@@ -101,14 +105,17 @@ class Job:
             elif state == 'failed':
                 del native_ids[ndx]
 
-        out = await runcmd(str(self.base / 'scripts' / 'cancel'),
-                           *[str(job_id) for ndx, job_id in native_ids.items()])
-        if isinstance(out, int):
-            return False
+        ids = [str(job_id) for ndx, job_id in native_ids.items()]
+        if len(ids) > 0:
+            out = await runcmd(str(self.base / 'scripts' / 'cancel'), *ids)
+            if isinstance(out, int):
+                _logger.error('cancel script returned %d', out)
+                return False
         on_canceled = self.base / 'scripts' / 'on_canceled'
         if on_canceled.exists():
             out = await runcmd(str(on_canceled))
         if isinstance(out, int):
+            _logger.error('on_canceled callback returned %d', out)
             return False
         return True
 

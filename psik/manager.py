@@ -1,4 +1,6 @@
 from typing import Union, Dict, Tuple, List, Any
+import logging
+_logger = logging.getLogger(__name__)
 
 from pathlib import Path
 from time import sleep
@@ -91,8 +93,7 @@ class JobManager:
                 try:
                     jobs[jobdir.name] = Job(jobdir)
                 except Exception as e:
-                    print("Unable to load ", jobdir, ":")
-                    print(e)
+                    _logger.info("Unable to load %s", jobdir, exc_info=e)
         return jobs
 
 def create_job(base : Path, jobspec : JobSpec,

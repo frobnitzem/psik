@@ -1,9 +1,9 @@
 import asyncio
 from typing import Optional
 from pathlib import Path
-import logging
 from typing_extensions import Annotated
 import sys
+import logging
 _logger = logging.getLogger(__name__)
 
 import typer

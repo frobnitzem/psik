@@ -2,5 +2,5 @@
 # Schedule job locally when system load is low.
 # https://man7.org/linux/man-pages/man1/batch.1p.html
 cd '{{job.directory}}' && \
-{SHELL=`{which rc} batch '{{base}}/scripts/job' $* || exit 1} \
+{echo '{{base}}/scripts/job '$* | SHELL=`{which rc} batch >[2=1] || exit 1} \
   | cut -d ' ' -f 2

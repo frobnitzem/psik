@@ -57,6 +57,10 @@ def test_app(tmp_path):
     print(result.stdout)
     assert result.exit_code == 0
 
+    result = runner.invoke(app, ["cancel", job])
+    print(result.stdout)
+    assert result.exit_code == 0
+
     result = runner.invoke(app, ["ls", "--config", cfg])
     assert result.exit_code == 0
     assert result.stdout.count('\n') >= 2
