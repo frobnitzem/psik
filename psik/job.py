@@ -11,6 +11,7 @@ from anyio import Path as aPath
 
 from .models import JobSpec, JobState
 from .statfile import read_csv, append_csv
+from .exceptions import InvalidJobException, SubmitException
 
 class Job:
     def __init__(self, base : Union[str, Path, aPath]):
@@ -88,36 +89,30 @@ class Job:
         status[JobState.active] -= done
         return jobndx, status
 
-    async def submit(self) -> bool:
+    async def submit(self):
         """Run pre_submit script (if applicable)
            and then the submit script.
         """
         if not self.valid:
             await self.read_info()
 
-        pre_submit = self.base / 'scripts' / 'pre_submit'
-        if len(self.history) == 1 and await pre_submit.is_file():
-            ret, out, err = await runcmd(str(pre_submit))
-        if ret != 0:
-            return False
-
         jobndx, _ = self.summarize()
 
         ret, out, err = await runcmd(str(self.base / 'scripts' / 'submit'), str(jobndx))
         if ret != 0:
-            return False
+            raise SubmitException(err)
         try:
             native_job_id = int(out)
         except Exception:
             _logger.error('%s: submit script returned unparsable result', self.stamp)
-            native_job_id = -1
+            native_job_id = 0
         return await self.reached(jobndx, JobState.queued, native_job_id)
 
-    async def cancel(self) -> bool:
+    async def cancel(self):
         # Prevent a race condition by recording this first.
         ok = await self.reached(0, JobState.canceled)
         if not ok:
-            return False
+            raise InvalidJobException("Unable to update job status.")
         await self.read_info()
 
         native_ids = {}
@@ -134,13 +129,13 @@ class Job:
             ret, out, err = await runcmd(str(self.base / 'scripts' / 'cancel'),
                                          *ids)
             if ret != 0:
-                return False
+                raise SubmitException(err)
         on_canceled = self.base / 'scripts' / 'on_canceled'
         if await on_canceled.is_file():
             ret, out, err = await runcmd(str(on_canceled))
-        return ret == 0
 
 async def runcmd(prog : Union[Path,str], *args : str,
+                 cwd : Union[Path,str,None] = None,
                  expect_ok : Optional[bool] = True) -> Tuple[int,str,str]:
     """Run the given command inside an asyncio subprocess.
        
@@ -148,7 +143,7 @@ async def runcmd(prog : Union[Path,str], *args : str,
     """
     pipe = asyncio.subprocess.PIPE
     proc = await asyncio.create_subprocess_exec(
-                    prog, *args,
+                    prog, *args, cwd=cwd,
                     stdout=pipe, stderr=pipe)
     stdout, stderr = await proc.communicate()
     # note stdout/stderr are binary

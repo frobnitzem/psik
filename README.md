@@ -108,9 +108,12 @@ prefix/
           info is an integer correponding to a scheduler's jobid (for queued)
           or a return status code (other states)
       scripts/ - directory containing
-        pre_submit   - script run on the submitting node.  It is run
-                       before submitting the first instance of the job
-                        An error will prevent job submission.
+        pre_submit   - script run on the submitting node
+                       It is sourced during the submit script.
+                       It receives the jobndx as its only argument.
+                       Failure must be reported by returning nonzero,
+                       and should be accompanied by a message to stderr.
+                       Any exit from this script will prevent job submission.
         on_active    - script to run from job.rc on start
         on_completed - script to run from job.rc on successful exit
         on_failed    - script to run from job.rc on failing exit
@@ -225,7 +228,7 @@ to the data model, and three changes to the execution semantics:
   - resources : ResourceSpec = ResourceSpec()
   - attributes : JobAttributes = JobAttributes()
   - ~~pre\_launch~~
-  - _pre\_submit_ : str -- pre\_launch has been replaced with pre\_submit. It is a script, not a filename. It is run before submitting job.rc (when the job state is `new`).
+  - _pre\_submit_ : str -- pre\_launch has been replaced with pre\_submit. It is a script, not a filename. It is sourced by the submit script before submitting job.rc.
   - ~~post\_launch~~
   - launcher = None
   - _events_ : Dict[JobState, str] = {} -- callbacks

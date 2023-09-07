@@ -97,9 +97,7 @@ def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     base = Path(config.prefix) / config.backend
 
     job = Job(base / str(stamp))
-    ok = run_async( job.cancel() )
-    if not ok:
-        raise typer.Exit(code=1)
+    run_async( job.cancel() )
 
 @app.command()
 def reached(base : str = typer.Argument(..., help="Job's base directory."),
@@ -154,6 +152,6 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
     async def create_submit(spec, submit):
         job = await mgr.create(spec)
         if submit:
-            return await job.submit()
+            await job.submit()
         
     run_async( create_submit(spec, submit) )

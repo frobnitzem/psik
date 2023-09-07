@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "psik"
-version = "0.4.0"
+version = "0.5.0"
 description = "Portable Submission Interface for Jobs"
 authors = ["David M. Rogers <predictivestatmech@gmail.com>"]
 
