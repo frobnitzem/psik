@@ -2,5 +2,5 @@
 # local submission forks job into a background process
 cd '{{job.directory}}' || exit 1
 . '{{base}}/scripts/pre_submit' $* >[1=2] || exit 1
-'{{base}}/scripts/job' $* &
+'{{base}}/scripts/job' $* >>'{{base}}/log/messages' >[2=1] &
 echo $apid
