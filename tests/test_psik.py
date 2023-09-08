@@ -60,7 +60,7 @@ def test_app(tmp_path):
     print(result.stdout)
     assert result.exit_code == 0
 
-    result = runner.invoke(app, ["cancel", "-vv", job])
+    result = runner.invoke(app, ["cancel", "--config", cfg, "-vv", job])
     print(result.stdout)
     assert result.exit_code == 0
 
