@@ -89,7 +89,11 @@ the following shell variables are defined during job execution:
 - base   -- base directory for psik's tracking of this job
 - jobndx -- job serial number provided at launch time
 - jobid  -- backend-specific job id for this job (if available)
+- psik   -- the path to the psik program (or a literal "psik" if not found)
 
+These are not all available during the `pre_submit` script,
+but they are available within `event` (callback) scripts.
+See [psik/templates/partials/job\_body] for all the details.
 
 ## How it works
 

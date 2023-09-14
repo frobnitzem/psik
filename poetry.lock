@@ -68,7 +68,7 @@ python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7
 
 [[package]]
 name = "coverage"
-version = "7.3.0"
+version = "7.3.1"
 description = "Code coverage measurement for Python"
 category = "dev"
 optional = false
@@ -335,7 +335,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-cov", "pytest-ena
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "d8789d3039a386908f66f002d50fb2cded5a6c7cbc1f0cf3906ba1eafc084b86"
+content-hash = "e06e76027a71aacc7f4ed474e367fa49ab4ac277403b9dc71c0a42b43fa725dc"
 
 [metadata.files]
 annotated-types = []

@@ -1,12 +1,13 @@
 if(~ $#jobndx 0) jobndx = -1
 if(~ $#base 0) base = '{{base}}'
+psik = '{{psik}}'
 
-psik reached $base $jobndx active $jobid
+$psik reached -- $base $jobndx active $jobid
 $base/scripts/on_active
 
 # what to do on failure
 fn fail {
-	psik reached $base $jobndx failed $jobid
+	$psik reached -- $base $jobndx failed $jobid
 	$base/scripts/on_failed
 }
 fn sighup fail
@@ -19,5 +20,5 @@ if(! ~ $status '' 0) {
     fail
 }
 
-psik reached $base $jobndx completed $jobid
+$psik reached -- $base $jobndx completed $jobid
 $base/scripts/on_completed

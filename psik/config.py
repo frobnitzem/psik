@@ -1,10 +1,19 @@
 from typing import Union
+from functools import cache
 import os
+import sys
 from pathlib import Path
 
 from pydantic import BaseModel
 
 from .models import JobAttributes
+
+@cache
+def psik_path() -> str:
+    ans = os.path.join(os.path.dirname(sys.executable), "psik")
+    if os.access(ans, os.X_OK):
+        return ans
+    return "psik"
 
 class Config(BaseModel):
     prefix       : str

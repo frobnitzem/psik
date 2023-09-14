@@ -30,16 +30,18 @@ class JobManager:
     """
     def __init__(self, prefix : Union[str,Path], backend : str,
                        defaults : JobAttributes = JobAttributes()):
+        assert Path(prefix).is_dir(), "JobManager: prefix is not a dir"
         assert backend.count("/") == 0 and backend.count("\\") == 0, \
                     "Invalid backend name."
+        templates.check(backend) # verify all templates are present
+
         pre = (Path(prefix) / backend).resolve()
+        pre.mkdir(exist_ok=True)
+        assert os.access(pre, os.W_OK)
+
+        self.prefix = aPath(pre)
         self.backend  = backend
         self.defaults = defaults
-
-        templates.check(self.backend) # verify all templates are present
-        assert pre.is_dir(), "JobManager: prefix is not a dir"
-        assert os.access(pre, os.W_OK)
-        self.prefix = aPath(pre)
 
     async def _alloc(self, jobspec : JobSpec) -> aPath:
         """Allocate a new path where a job can be created.
