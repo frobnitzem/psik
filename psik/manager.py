@@ -139,7 +139,7 @@ async def create_job(base : aPath, jobspec : JobSpec,
     for state in [JobState.active, JobState.completed,
                   JobState.failed, JobState.canceled]:
         action = jobspec.events.get(state, default_action)
-        await create_file(base/'scripts'/f'on_{state}',
+        await create_file(base/'scripts'/f'on_{state.value}',
                           prepare_script(action), 0o755)
     await create_file(base/'scripts'/'pre_submit',
                       prepare_script(jobspec.pre_submit), 0o755)
