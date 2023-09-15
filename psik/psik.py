@@ -50,13 +50,15 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     base = Path(config.prefix) / config.backend
 
     async def stat():
-        job = await Job(base / str(stamp))
+        job = await Job(base / stamp)
         #print(job.spec.dump_model_json(indent=4))
         print(job.spec.name)
+        print("    base: %s"%str(base / stamp))
+        print("    work: %s"%str(job.spec.directory))
         print()
-        print("time ndx state info")
+        print("    time ndx state info")
         for line in job.history:
-            print("%.3f %3d %10s %8d" % line)
+            print("    %.3f %3d %10s %8d" % line)
     run_async(stat())
 
 @app.command()

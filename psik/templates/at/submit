@@ -4,4 +4,4 @@
 cd '{{job.directory}}' || exit 1
 . '{{base}}/scripts/pre_submit' $* >[1=2] || exit 1
 {echo '{{base}}/scripts/job '$* | SHELL=`{which rc} batch >[2=1] || exit 1} \
-    | cut -d ' ' -f 2
+    | sed -ne 's/.*[Jj][Oo][Bb] \([^ ]*\) [Aa][Tt].*/\1/p'
