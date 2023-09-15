@@ -89,7 +89,7 @@ class Job:
         status[JobState.active] -= done
         return jobndx, status
 
-    async def submit(self):
+    async def submit(self) -> None:
         """Run pre_submit script (if applicable)
            and then the submit script.
         """
@@ -104,15 +104,16 @@ class Job:
         try:
             native_job_id = int(out)
         except Exception:
-            _logger.error('%s: submit script returned unparsable result', self.stamp)
+            _logger.error('%s: submit script returned unparsable result: %s',
+                          self.stamp, out)
             native_job_id = 0
-        return await self.reached(jobndx, JobState.queued, native_job_id)
+        await self.reached(jobndx, JobState.queued, native_job_id)
 
-    async def cancel(self):
+    async def cancel(self) -> None:
         # Prevent a race condition by recording this first.
-        ok = await self.reached(0, JobState.canceled)
-        if not ok:
-            raise InvalidJobException("Unable to update job status.")
+        await self.reached(0, JobState.canceled)
+        #if not ok:
+        #    raise InvalidJobException("Unable to update job status.")
         await self.read_info()
 
         native_ids = {}

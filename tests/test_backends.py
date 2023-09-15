@@ -21,13 +21,12 @@ async def test_at(tmp_path):
     spec = JobSpec(name="hello",
                script = """#!/usr/bin/env rc
                echo Look out! >[1=2]
-               sleep 60
+               sleep 2
                echo rawr >lion
            """)
 
     job = await mgr.create(spec)
-    ok = await job.submit()
-    assert ok
+    await job.submit()
     assert len(job.history) == 2 # new, queued
     await job.cancel()
     assert len(job.history) > 2 # new, queued, canceled
