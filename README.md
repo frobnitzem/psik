@@ -260,24 +260,24 @@ The `ResourceSpec` and `JobAttributes` models are identical, except
 `duration` has been fixed as required job-time in units of minutes,
 and moved out of `JobAttributes` and into `ResourceSpec`.
 
-## Adding a new batch queue backend do Psi\_k
+## Adding a new batch queue backend to Psi\_k
 
 Internally, $\Psi_k$ implements each backend by including three templates:
 
 psik/templates/
- * `<backend>-submit`  -- Submit a job to the queue.
+ * `<backend>/submit`  -- Submit a job to the queue.
                           Output to stderr is printed to the user's terminal.
                           On success, print only the backend's native job\id
                           to stdout and return 0.
                           On failure, must return nonzero. 
- * `<backend>-job`     -- Job submitted to the queue.
-                          Should insert job resource and attributes
+ * `<backend>/job`     -- Job submitted to the queue.
+                          Should annotate job resource and attributes
                           in a way the backend understands.
                           Must call psik logging and callbacks
                           at appropriate points. 
                           Must setup "Environment during job execution"
-                          as specified below.
- * `<backend>-cancel`  -- Ask the backend to cancel the job.
+                          as specified above.
+ * `<backend>/cancel`  -- Ask the backend to cancel the job.
                           Must call psik logging and callbacks
                           at appropriate points.
 
