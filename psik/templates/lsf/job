@@ -29,8 +29,8 @@
 {{/project_name}}
 {{#reservation_id}}#BSUB -U "{{.}}"
 {{/reservation_id}}
-{{#custom_attributes.lsf}}#BSUB {{key}} "{{{value}}}"
-{{/custom_attributes.lsf}}
+{{#custom_attributes}}#BSUB {{key}} "{{{value}}}"
+{{/custom_attributes}}
 {{/job.attributes}}
 #BSUB -e /dev/null
 #BSUB -o /dev/null
