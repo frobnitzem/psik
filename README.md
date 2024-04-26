@@ -46,7 +46,7 @@ An example configuration file is below:
 
     {
     "prefix": "/tmp/.psik",
-    "backend": "at",
+    "backend": "local",
     "default_attr": {
         "project_name": "project_automate",
         "custom_attributes": {
@@ -56,10 +56,10 @@ An example configuration file is below:
         }
     }
 
-The "at" backend is more suitable for running locally,
-and uses POSIX batch command.
-There is a "local" backend the just runs processes in the background
+The "local" backend the just runs processes in the background
 and is used for testing.
+The "at" backend is more suitable for running locally,
+and uses POSIX batch command.  However, it's broken on OSX.
 Adding more backends is easy.
 
 

@@ -22,10 +22,13 @@ class Config(BaseModel):
 
 def load_config(path1 : Union[str, Path, None]) -> Config:
     cfg_name = 'psik.json'
-    if path1 is None:
-        path = Path(os.environ["HOME"]) / '.config' / cfg_name
-    else:
+    if path1 is not None:
         path = Path(path1)
+    else:
+        if "PSIK_CONFIG" in os.environ:
+            path = Path(os.environ["PSIK_CONFIG"])
+        else:
+            path = Path(os.environ["HOME"]) / '.config' / cfg_name
     assert path.exists(), f"{cfg_name} is required to exist (tried {path})"
     config = Config.model_validate_json(path.read_text(encoding='utf-8'))
     # Ensure the backend directory exists.
