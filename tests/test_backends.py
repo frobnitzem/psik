@@ -14,9 +14,7 @@ def test_backends():
 @pytest.mark.skip
 @pytest.mark.asyncio
 async def test_at(tmp_path):
-    backend = BackendConfig(name = "at", type = "at")
-    base = tmp_path / backend.name
-    base.mkdir()
+    backend = BackendConfig(type = "at")
     config = Config(prefix = tmp_path, backend = backend)
 
     mgr = JobManager(config)
@@ -35,13 +33,11 @@ async def test_at(tmp_path):
     
     print(job.history)
     if len(job.history) > 3: # new, queued, started, canceled
-        assert (tmp_path/'log'/'stderr.1').read_text() == 'Look out!\n'
+        assert (job.base/'log'/'stderr.1').read_text() == 'Look out!\n'
 
 @pytest.mark.asyncio
 async def test_local(tmp_path):
-    backend = BackendConfig(name = "local", type = "local")
-    base = tmp_path / backend.name
-    base.mkdir()
+    backend = BackendConfig(type = "local")
     config = Config(prefix = tmp_path, backend = backend)
 
     mgr = JobManager(config)
@@ -60,4 +56,4 @@ async def test_local(tmp_path):
     
     print(job.history)
     if len(job.history) > 3: # new, queued, started, canceled
-        assert (tmp_path/'log'/'stderr.1').read_text() == 'Look out!\n'
+        assert (job.base/'log'/'stderr.1').read_text() == 'Look out!\n'

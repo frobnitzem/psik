@@ -26,8 +26,11 @@ class ResourceSpec(BaseModel):
 #
 # Hence `custom_attributes` is renamed to
 # `attributes`, since it applies to this specific backend.
+#
+# Nevertheless, these can be specified/overriden as part of a JobSpec,
+# so they should not include API-unsafe values (e.g. psik path,
+# server hostname, etc.)
 class BackendConfig(BaseModel):
-    name              : str = "default"
     type              : str = "local"
     queue_name        : Optional[str] = None
     project_name      : Optional[str] = None

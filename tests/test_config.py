@@ -11,7 +11,6 @@ import psik.templates as templates
 cfg = """{
   "prefix": "%s",
   "backend": {
-    "name": "default",
     "type": "local",
     "project_name": "my_proj",
     "attributes": {
@@ -31,14 +30,13 @@ def write_config(tmp_path):
 def test_config():
     config = Config.model_validate_json(cfg % "/tmp")
     assert str(config.prefix) == "/tmp"
-    assert config.backend.name == "default"
     assert config.backend.type == "local"
     assert isinstance(config.backend, BackendConfig)
 
 @pytest.mark.asyncio
 async def test_create(tmp_path):
     config = load_config( write_config(tmp_path) )
-    base = Path(config.prefix) / config.backend.name
+    base = Path(config.prefix)
     assert base.is_dir()
 
     mgr = JobManager(config)

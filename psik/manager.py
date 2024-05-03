@@ -31,12 +31,9 @@ class JobManager:
     """
     def __init__(self, config : Config):
         assert Path(config.prefix).is_dir(), "JobManager: prefix is not a dir"
-        backend = config.backend.name
-        assert backend.count("/") == 0 and backend.count("\\") == 0, \
-                    "Invalid backend name."
         templates.check(config.backend.type) # verify all templates are present
 
-        pre = (Path(config.prefix) / backend).resolve()
+        pre = Path(config.prefix).resolve()
         pre.mkdir(exist_ok=True)
         assert os.access(pre, os.W_OK)
 

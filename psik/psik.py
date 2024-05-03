@@ -45,7 +45,7 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    base = Path(config.prefix) / config.backend.name
+    base = config.prefix
 
     async def stat():
         job = await Job(base / stamp)
@@ -67,7 +67,7 @@ def rm(stamps : List[str] = typer.Argument(...,
     Remove job tracking directories for the given jobstamps.
     """
     config = load_config(cfg)
-    base = Path(config.prefix) / config.backend.name
+    base = config.prefix
     # TODO: Check with the backend and prevent deletion if
     # job is still there.
 
@@ -94,7 +94,7 @@ def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    base = Path(config.prefix) / config.backend.name
+    base = config.prefix
 
     job = Job(base / str(stamp))
     run_async( job.cancel() )

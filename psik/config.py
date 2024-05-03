@@ -28,12 +28,9 @@ def load_config(path1 : Union[str, Path, None]) -> Config:
             path = Path(os.environ["HOME"]) / '.config' / cfg_name
     assert path.exists(), f"{cfg_name} is required to exist (tried {path})"
     config = Config.model_validate_json(path.read_text(encoding='utf-8'))
-    backend = config.backend.name
-    assert backend.count("/") == 0 and backend.count("\\") == 0, \
-                    "Invalid backend name."
 
     # Ensure the backend directory exists.
-    (config.prefix/backend).mkdir(parents=True, exist_ok=True)
+    config.prefix.mkdir(parents=True, exist_ok=True)
     # Ensure the psik/rc paths exist - note these may not exist on
     # the submitting host.
     #assert os.access(config.psik_path, os.X_OK), 
