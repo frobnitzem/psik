@@ -104,7 +104,7 @@ class JobManager:
         
         tpl = templates.render_all(self.backend_t, templates.actions, data)
 
-        return await create_job(base, jobspec, **tpl)
+        return await create_job(base, jobspec, self.config.rc_path, **tpl)
 
     async def ls(self) -> AsyncIterator[Job]:
         """ Async generator of Job entries.
@@ -116,7 +116,7 @@ class JobManager:
                 except Exception as e:
                     _logger.info("Unable to load %s", jobdir, exc_info=e)
 
-async def create_job(base : aPath, jobspec : JobSpec,
+async def create_job(base : aPath, jobspec : JobSpec, rc_path : str,
                      submit : str, cancel : str, job : str) -> Job:
     """ Create job files from layout info.
 
@@ -136,23 +136,23 @@ async def create_job(base : aPath, jobspec : JobSpec,
     await create_file(base/'scripts'/'cancel', cancel, 0o755)
     await create_file(base/'scripts'/'job', job, 0o755)
     await create_file(base/'scripts'/'run',
-                      prepare_script(jobspec.script), 0o755)
+                      prepare_script(jobspec.script, rc_path), 0o755)
     #(base/'scripts'/'run').unlink(missing_ok=True)
-    default_action = "#!/usr/bin/env rc\n"
+    default_action = ""
     for state in [JobState.active, JobState.completed,
                   JobState.failed, JobState.canceled]:
         action = jobspec.events.get(state, default_action)
         await create_file(base/'scripts'/f'on_{state.value}',
-                          prepare_script(action), 0o755)
+                          prepare_script(action, rc_path), 0o755)
     await create_file(base/'scripts'/'pre_submit',
-                      prepare_script(jobspec.pre_submit), 0o755)
+                      prepare_script(jobspec.pre_submit, rc_path), 0o755)
     # log completion of 'new' status
     await append_csv(base/'status.csv', timestamp(), 0, 'new', 0)
     return await Job(base)
 
-def prepare_script(s):
+def prepare_script(s : str, rc_path : str) -> str:
     if not s.startswith("#!"):
-        s = "#!/usr/bin/env rc\n" + s
+        s = f"#!{rc_path}\n" + s
     if not s.endswith("\n"):
         s = s + "\n"
     return s

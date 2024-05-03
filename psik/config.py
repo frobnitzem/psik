@@ -9,13 +9,13 @@ from pydantic import BaseModel, Field
 from .models import BackendConfig
 
 _self_path = Path(os.path.dirname(sys.executable)) / "psik"
-_rc_path   = Path(os.path.dirname(sys.executable)) / "rc"
+_rc_path   = "/usr/bin/env rc"
 
 class Config(BaseModel):
     prefix       : Path                               # prefix for psik output
     backend      : BackendConfig = BackendConfig()    # backend configuration
     psik_path    : Path = Field(default = _self_path) # path to psik executable
-    rc_path      : Path = Field(default = _rc_path)   # path to rc executable
+    rc_path      : str = Field(default = _rc_path)    # path to rc executable
 
 def load_config(path1 : Union[str, Path, None]) -> Config:
     cfg_name = 'psik.json'
