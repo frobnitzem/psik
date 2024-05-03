@@ -5,19 +5,20 @@ import pytest
 
 from psik.config import load_config, Config
 from psik.manager import JobManager
-from psik.models import JobSpec, ResourceSpec, JobAttributes, JobState
+from psik.models import JobSpec, ResourceSpec, BackendConfig, JobState
 import psik.templates as templates
 
 cfg = """{
-"prefix": "%s",
-"backend": "local",
-"default_attr": {
+  "prefix": "%s",
+  "backend": {
+    "name": "default",
+    "type": "local",
     "project_name": "my_proj",
-    "custom_attributes": {
-            "srun": {"--gpu-bind": "closest"},
-            "jsrun": {"-b": "packed:rs"}
-        }
+    "attributes": {
+        "--gpu-bind": "closest",
+        "-b": "packed:rs"
     }
+  }
 }
 """
 
@@ -30,21 +31,21 @@ def write_config(tmp_path):
 def test_config():
     config = Config.model_validate_json(cfg % "/tmp")
     assert str(config.prefix) == "/tmp"
-    assert config.backend == "local"
-    assert isinstance(config.default_attr, JobAttributes)
+    assert config.backend.name == "default"
+    assert config.backend.type == "local"
+    assert isinstance(config.backend, BackendConfig)
 
 @pytest.mark.asyncio
 async def test_create(tmp_path):
     config = load_config( write_config(tmp_path) )
-    base = Path(config.prefix) / config.backend
+    base = Path(config.prefix) / config.backend.name
     assert base.is_dir()
 
-    mgr = JobManager(config.prefix, config.backend)
+    mgr = JobManager(config)
     spec = JobSpec(
                 name = "foo",
                 script = "hostname",
                 resources = ResourceSpec(),
-                attributes = JobAttributes(),
            )
     job = await mgr.create(spec)
     # default choice

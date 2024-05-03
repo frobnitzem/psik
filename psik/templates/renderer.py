@@ -9,7 +9,6 @@ _logger = logging.getLogger(__name__)
 
 import pystache # type: ignore
 
-from ..config import psik_path
 from . import actions
 
 @cache
@@ -35,9 +34,9 @@ def _get() -> pystache.Renderer:
            )
 
 def render(backend : str, act : str, data : Dict[str, Any]) -> str:
-    u = {"psik": psik_path()}
-    u.update(data)
-    return _get().render(_load(backend, act), u)
+    #u = {"psik": psik_path()}
+    #u.update(data)
+    return _get().render(_load(backend, act), data)
 
 def render_all(backend : str, actions : List[str],
                data : Dict[str, Any]) -> Dict[str, str]:

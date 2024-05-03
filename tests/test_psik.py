@@ -26,7 +26,7 @@ def test_ls(tmp_path):
 def test_app(tmp_path):
     cfg = write_config(tmp_path)
     config = load_config( cfg )
-    base = Path(config.prefix) / config.backend
+    base = Path(config.prefix) / config.backend.name
 
     spec = Path(tmp_path/'jobspec.json')
     spec.write_text(r"""

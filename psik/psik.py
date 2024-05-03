@@ -16,8 +16,6 @@ from .manager import JobManager
 from .models import (
         JobState,
         JobSpec,
-        ResourceSpec,
-        JobAttributes,
         load_jobspec
 )
 
@@ -47,7 +45,7 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    base = Path(config.prefix) / config.backend
+    base = Path(config.prefix) / config.backend.name
 
     async def stat():
         job = await Job(base / stamp)
@@ -69,7 +67,7 @@ def rm(stamps : List[str] = typer.Argument(...,
     Remove job tracking directories for the given jobstamps.
     """
     config = load_config(cfg)
-    base = Path(config.prefix) / config.backend
+    base = Path(config.prefix) / config.backend.name
     # TODO: Check with the backend and prevent deletion if
     # job is still there.
 
@@ -96,7 +94,7 @@ def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    base = Path(config.prefix) / config.backend
+    base = Path(config.prefix) / config.backend.name
 
     job = Job(base / str(stamp))
     run_async( job.cancel() )
@@ -123,8 +121,7 @@ def ls(v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    mgr = JobManager(config.prefix, config.backend,
-                     defaults = config.default_attr)
+    mgr = JobManager(config)
     async def show():
         async for job in mgr.ls():
             t, ndx, state, info = job.history[-1]
@@ -143,8 +140,7 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    mgr = JobManager(config.prefix, config.backend,
-                     defaults = config.default_attr)
+    mgr = JobManager(config)
     try:
         spec = load_jobspec(jobspec)
     except Exception as e:

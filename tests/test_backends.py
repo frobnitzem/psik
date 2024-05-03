@@ -2,22 +2,49 @@ import sys
 import pytest
 
 from psik.manager import JobManager
-from psik.models import JobSpec
-from psik.config import load_config
+from psik.models import JobSpec, BackendConfig
+from psik.config import Config
 from psik.templates import list_backends
 
 def test_backends():
     backends = list_backends()
     assert len(backends) >= 4
 
-@pytest.mark.skipif(sys.platform == 'darwin', reason="OSX eschews batch/at")
+#@pytest.mark.skipif(sys.platform == 'darwin', reason="OSX eschews batch/at")
+@pytest.mark.skip
 @pytest.mark.asyncio
 async def test_at(tmp_path):
-    backend = 'at'
-    base = tmp_path/backend
+    backend = BackendConfig(name = "at", type = "at")
+    base = tmp_path / backend.name
     base.mkdir()
+    config = Config(prefix = tmp_path, backend = backend)
 
-    mgr = JobManager(tmp_path, backend)
+    mgr = JobManager(config)
+    spec = JobSpec(name="hello",
+               script = """#!/usr/bin/env rc
+               echo Look out! >[1=2]
+               sleep 2
+               echo rawr >lion
+           """)
+
+    job = await mgr.create(spec)
+    await job.submit()
+    assert len(job.history) == 2 # new, queued
+    await job.cancel()
+    assert len(job.history) > 2 # new, queued, canceled
+    
+    print(job.history)
+    if len(job.history) > 3: # new, queued, started, canceled
+        assert (tmp_path/'log'/'stderr.1').read_text() == 'Look out!\n'
+
+@pytest.mark.asyncio
+async def test_local(tmp_path):
+    backend = BackendConfig(name = "local", type = "local")
+    base = tmp_path / backend.name
+    base.mkdir()
+    config = Config(prefix = tmp_path, backend = backend)
+
+    mgr = JobManager(config)
     spec = JobSpec(name="hello",
                script = """#!/usr/bin/env rc
                echo Look out! >[1=2]

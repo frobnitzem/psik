@@ -21,11 +21,18 @@ class ResourceSpec(BaseModel):
     gpu_cores_per_process : int = 0
     exclusive_node_use    : bool = True
 
-class JobAttributes(BaseModel):
+# Was JobAttributes.  However, these are actually
+# backend configuration options.
+#
+# Hence `custom_attributes` is renamed to
+# `attributes`, since it applies to this specific backend.
+class BackendConfig(BaseModel):
+    name              : str = "default"
+    type              : str = "local"
     queue_name        : Optional[str] = None
     project_name      : Optional[str] = None
     reservation_id    : Optional[str] = None
-    custom_attributes : Dict[str, Dict[str,str]] = {}
+    attributes        : Dict[str,str] = {} # backend config. options
 
 class JobSpec(BaseModel):
     name        : Optional[str] = Field(default=None, title="Job name")
@@ -36,7 +43,7 @@ class JobSpec(BaseModel):
     inherit_environment : bool = Field(default=True, title="If this flag is set to False, the job starts with an empty environment.")
 
     resources   : ResourceSpec = Field(default=ResourceSpec(), title="Job resource requirements")
-    attributes  : JobAttributes = Field(default=JobAttributes(), title="Time and job labels")
+    backend     : BackendConfig = Field(default=BackendConfig(), title="Backend configuration values.")
     pre_submit  : str = Field(default="", title="Run before submitting job.rc, but only when the job state is `new`.")
     events      : Dict[JobState, str] = Field(default={}, title="callbacks")
 

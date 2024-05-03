@@ -10,9 +10,10 @@ from time import time as timestamp
 
 from anyio import Path as aPath
 
-from .models import JobSpec, JobAttributes, JobState
+from .models import JobSpec, BackendConfig, JobState
 from .statfile import append_csv, create_file
 from .job import Job
+from .config import Config
 import psik.templates as templates
 
 class JobManager:
@@ -22,26 +23,26 @@ class JobManager:
         job directories.
 
         The last path component of the prefix
-        must be a valid backend name -- which this manager
+        must be a valid backend system name -- which this manager
         (and its associated jobs) work with exclusively.
 
         If set, default job attributes are filled in for
         all jobs that do not have those attributes set already.
     """
-    def __init__(self, prefix : Union[str,Path], backend : str,
-                       defaults : JobAttributes = JobAttributes()):
-        assert Path(prefix).is_dir(), "JobManager: prefix is not a dir"
+    def __init__(self, config : Config):
+        assert Path(config.prefix).is_dir(), "JobManager: prefix is not a dir"
+        backend = config.backend.name
         assert backend.count("/") == 0 and backend.count("\\") == 0, \
                     "Invalid backend name."
-        templates.check(backend) # verify all templates are present
+        templates.check(config.backend.type) # verify all templates are present
 
-        pre = (Path(prefix) / backend).resolve()
+        pre = (Path(config.prefix) / backend).resolve()
         pre.mkdir(exist_ok=True)
         assert os.access(pre, os.W_OK)
 
         self.prefix = aPath(pre)
-        self.backend  = backend
-        self.defaults = defaults
+        self.backend_t = config.backend.type
+        self.config = config
 
     async def _alloc(self, jobspec : JobSpec) -> aPath:
         """Allocate a new path where a job can be created.
@@ -66,20 +67,19 @@ class JobManager:
 
         return base
 
-    def _insert_defaults(self, attr : JobAttributes) -> None:
-        """ Merge JobManager.defaults into .defaults into
-            the JobAttributes structure.  This way JobSpec-s
+    def _insert_defaults(self, attr : BackendConfig) -> None:
+        """ Merge JobManager.config.backend into
+            the BackendConfig structure `attr`.  This way JobSpec-s
             don't have to keep entering their project-id, etc.
         """
+        defaults = self.config.backend
         for key, val in attr.model_dump().items():
             if val is None:
-                val = getattr(self.defaults, key)
+                val = getattr(defaults, key)
                 if val is not None:
                     setattr(attr, key, val)
-            if len(attr.custom_attributes) == 0 \
-                    and len(self.defaults.custom_attributes) > 0:
-                attr.custom_attributes.update(
-                        self.defaults.custom_attributes)
+            if len(attr.attributes) == 0 and len(defaults.attributes) > 0:
+                attr.attributes.update(defaults.attributes)
 
     async def create(self, jobspec : JobSpec) -> Job:
         """Create a new job from the given JobSpec
@@ -88,18 +88,21 @@ class JobManager:
            then calls create_job.
         """
         base = await self._alloc(jobspec) # allocate a base dir for this job
-        self._insert_defaults(jobspec.attributes)
+        self._insert_defaults(jobspec.backend)
         data : Dict[str,Any] = {
                 'job': jobspec.model_dump(),
-                'base': str(base)
+                'base': str(base),
+                'psik': self.config.psik_path,
+                'rc': self.config.rc_path
                }
-        #  Replaces `data[job.attributes.custom_attributes]`
-        #  with its key/val pairs specific to the backend in use.
-        custom1 = jobspec.attributes.custom_attributes.get(self.backend, {})
-        custom = [ {'key': k, 'value': v} for k, v in custom1.items() ]
-        data['job']['attributes']['custom_attributes'] = custom
+        #  Replaces `data[job.backend.attributes]`
+        #  with its key/val pairs specific to the backend_type in use.
+        data['job']['backend']['attributes'] = [
+                 {'key': k, 'value': v} for k, v in \
+                     jobspec.backend.attributes.items()
+             ]
         
-        tpl = templates.render_all(self.backend, templates.actions, data)
+        tpl = templates.render_all(self.backend_t, templates.actions, data)
 
         return await create_job(base, jobspec, **tpl)
 

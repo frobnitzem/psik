@@ -1,4 +1,4 @@
-#!/usr/bin/env rc
+#!{{rc}}
 {{#job.name}}#BSUB -J "{{.}}"
 {{/job.name}}
 {{#job.directory}}#BSUB -cwd "{{.}}"
@@ -21,7 +21,7 @@
 {{/gpu_cores_per_process}}
 {{/job.resources}}
 
-{{#job.attributes}}
+{{#job.backend}}
 {{#queue_name}}#BSUB -q "{{.}}"
 {{/queue_name}}
 {{#project_name}}#BSUB -G "{{.}}"
@@ -29,9 +29,9 @@
 {{/project_name}}
 {{#reservation_id}}#BSUB -U "{{.}}"
 {{/reservation_id}}
-{{#custom_attributes}}#BSUB {{key}} "{{{value}}}"
-{{/custom_attributes}}
-{{/job.attributes}}
+{{#attributes}}#BSUB {{key}} "{{{value}}}"
+{{/attributes}}
+{{/job.backend}}
 #BSUB -e /dev/null
 #BSUB -o /dev/null
 
