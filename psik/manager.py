@@ -120,7 +120,7 @@ async def create_job(base : aPath, jobspec : JobSpec, rc_path : str,
             Fills out the "base / " subdirectory:
                - spec.json
                - status.csv
-               - scripts/(pre_submit on_* submit cancel job run)
+               - scripts/(submit cancel job run)
                - empty work/ and log/ directories
     """
     assert await base.is_dir()
@@ -135,14 +135,6 @@ async def create_job(base : aPath, jobspec : JobSpec, rc_path : str,
     await create_file(base/'scripts'/'run',
                       prepare_script(jobspec.script, rc_path), 0o755)
     #(base/'scripts'/'run').unlink(missing_ok=True)
-    default_action = ""
-    for state in [JobState.active, JobState.completed,
-                  JobState.failed, JobState.canceled]:
-        action = jobspec.events.get(state, default_action)
-        await create_file(base/'scripts'/f'on_{state.value}',
-                          prepare_script(action, rc_path), 0o755)
-    await create_file(base/'scripts'/'pre_submit',
-                      prepare_script(jobspec.pre_submit, rc_path), 0o755)
     # log completion of 'new' status
     await append_csv(base/'status.csv', timestamp(), 0, 'new', 0)
     return await Job(base)

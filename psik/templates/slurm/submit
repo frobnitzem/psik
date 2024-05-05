@@ -1,6 +1,5 @@
 #!/usr/bin/env rc
 cd '{{job.directory}}' || exit 1
-. '{{base}}/scripts/pre_submit' $* >[1=2] || exit 1
 {sbatch '{{base}}/scripts/job' $* || exit 1} \
     | sed -n 's/.*[ \t]\([0-9][0-9]*\).*/\1/p'
 # e.g. "Submitted batch job 1431123"

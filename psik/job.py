@@ -9,9 +9,10 @@ from time import time as timestamp
 
 from anyio import Path as aPath
 
-from .models import JobSpec, JobState
+from .models import JobSpec, JobState, Callback
 from .statfile import read_csv, append_csv
 from .exceptions import InvalidJobException, SubmitException
+from .web import post_json
 
 class Job:
     def __init__(self, base : Union[str, Path, aPath]):
@@ -62,6 +63,13 @@ class Job:
         data1 = (t, jobndx, state.value, info)
         self.history.append( data )
         await append_csv(self.base / 'status.csv', *data1)
+        if not self.valid:
+            base = self.base
+            spec = await (base/'spec.json').read_text(encoding='utf-8')
+            self.spec = JobSpec.model_validate_json(spec)
+        if self.spec.callback is not None:
+            cb = Callback(jobndx = jobndx, state = state, info = info)
+            return post_json(self.spec.callback, cb) is not None
         return True
 
     def summarize(self) -> Tuple[int, Dict[JobState, Set[int]]]:
@@ -90,8 +98,7 @@ class Job:
         return jobndx, status
 
     async def submit(self) -> None:
-        """Run pre_submit script (if applicable)
-           and then the submit script.
+        """ Run the job's submit script.
         """
         if not self.valid:
             await self.read_info()
@@ -131,9 +138,6 @@ class Job:
                                          *ids)
             if ret != 0:
                 raise SubmitException(err)
-        on_canceled = self.base / 'scripts' / 'on_canceled'
-        if await on_canceled.is_file():
-            ret, out, err = await runcmd(str(on_canceled))
 
 async def runcmd(prog : Union[Path,str], *args : str,
                  cwd : Union[Path,str,None] = None,

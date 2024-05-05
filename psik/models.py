@@ -43,15 +43,21 @@ class JobSpec(BaseModel):
     script      : str = Field(..., title="Shell / shebang script to execute")
 
     environment : Dict[str,str] = Field(default={},title="custom environment variables")
-    inherit_environment : bool = Field(default=True, title="If this flag is set to False, the job starts with an empty environment.")
+    inherit_environment : bool  = Field(default=True, title="If this flag is set to False, the job starts with an empty environment.")
 
-    resources   : ResourceSpec = Field(default=ResourceSpec(), title="Job resource requirements")
+    resources   : ResourceSpec  = Field(default=ResourceSpec(), title="Job resource requirements")
     backend     : BackendConfig = Field(default=BackendConfig(), title="Backend configuration values.")
-    pre_submit  : str = Field(default="", title="Run before submitting job.rc, but only when the job state is `new`.")
-    events      : Dict[JobState, str] = Field(default={}, title="callbacks")
+    # deps       : List[str]     = Field(default=[], title="Dependencies required before starting this job.")
+    callback    : Optional[str] = Field(default=None, title="Callback URL for event notifications.")
 
 #j = JobSpec(script="mpirun hostname")
 #print(j.json())
+
+# Data models specific to status routes:
+class Callback(BaseModel):
+    jobndx  : int = Field(..., title="Sequential job index.")
+    state   : JobState = Field(..., title="State reached by job.")
+    info    : int = Field(0, title="Status code.")
 
 def load_jobspec(fname):
     return JobSpec.model_validate_json(

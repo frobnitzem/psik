@@ -56,11 +56,6 @@ async def test_create(tmp_path):
     assert os.access(Path(job.base) / 'scripts' / 'run', os.X_OK)
     for act in templates.actions:
         assert os.access(Path(job.base) / 'scripts' / act, os.X_OK)
-    for state in JobState:
-        if state == JobState.new: continue
-        if state == JobState.queued: continue
-        name = state.value
-        assert os.access(Path(job.base) / 'scripts' / f'on_{name}', os.X_OK)
     async for f in (job.base / 'scripts').iterdir():
         print(f"======== {f} ========")
         print(await f.read_text())

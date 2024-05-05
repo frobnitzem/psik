@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "psik"
-version = "1.0.0"
+version = "1.1.0"
 description = "Portable Submission Interface for Jobs"
 authors = ["David M. Rogers <predictivestatmech@gmail.com>"]
 
@@ -14,6 +14,7 @@ pystache = "^0.6.5"
 typer = "^0.9.0"
 anyio = "^4.0.0"
 importlib-metadata = "^6.8.0"
+aiohttp = ">=3.8.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.1.0"
