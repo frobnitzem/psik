@@ -69,7 +69,8 @@ class Job:
             self.spec = JobSpec.model_validate_json(spec)
         if self.spec.callback is not None:
             cb = Callback(jobndx = jobndx, state = state, info = info)
-            return post_json(self.spec.callback, cb) is not None
+            return await post_json(self.spec.callback,
+                                   cb.model_dump_json()) is not None
         return True
 
     def summarize(self) -> Tuple[int, Dict[JobState, Set[int]]]:
@@ -97,8 +98,9 @@ class Job:
         status[JobState.active] -= done
         return jobndx, status
 
-    async def submit(self) -> None:
+    async def submit(self) -> Tuple[int,int]:
         """ Run the job's submit script.
+            Return the job's jobndx and native_job_id.
         """
         if not self.valid:
             await self.read_info()
@@ -115,6 +117,7 @@ class Job:
                           self.stamp, out)
             native_job_id = 0
         await self.reached(jobndx, JobState.queued, native_job_id)
+        return jobndx, native_job_id
 
     async def cancel(self) -> None:
         # Prevent a race condition by recording this first.
