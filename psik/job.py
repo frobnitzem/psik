@@ -69,8 +69,12 @@ class Job:
             self.spec = JobSpec.model_validate_json(spec)
         if self.spec.callback is not None:
             cb = Callback(jobndx = jobndx, state = state, info = info)
+            token = None
+            if self.spec.cb_secret:
+                token = self.spec.cb_secret.get_secret_value()
             return await post_json(self.spec.callback,
-                                   cb.model_dump_json()) is not None
+                                   cb.model_dump_json(),
+                                   token) is not None
         return True
 
     def summarize(self) -> Tuple[int, Dict[JobState, Set[int]]]:

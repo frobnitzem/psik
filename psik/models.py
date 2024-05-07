@@ -2,7 +2,7 @@ from typing import Optional, Dict, Any
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 class JobState(str, Enum):
     new = "new"
@@ -48,7 +48,9 @@ class JobSpec(BaseModel):
     resources   : ResourceSpec  = Field(default=ResourceSpec(), title="Job resource requirements")
     backend     : BackendConfig = Field(default=BackendConfig(), title="Backend configuration values.")
     # deps       : List[str]     = Field(default=[], title="Dependencies required before starting this job.")
-    callback    : Optional[str] = Field(default=None, title="Callback URL for event notifications.")
+    callback    : Optional[str] = Field(default=None, title="URL to send event notifications.")
+    cb_secret   : Optional[SecretStr] = Field(default=None, title="hmac256 secret to sign updates sent to 'callback'")
+    client_secret : Optional[SecretStr] = Field(default=None, title="hmac256 secret to validate callback updates from clients")
 
 #j = JobSpec(script="mpirun hostname")
 #print(j.json())
@@ -57,7 +59,7 @@ class JobSpec(BaseModel):
 class Callback(BaseModel):
     jobndx  : int = Field(..., title="Sequential job index.")
     state   : JobState = Field(..., title="State reached by job.")
-    info    : int = Field(0, title="Status code.")
+    info    : int = Field(default=0, title="Status code.")
 
 def load_jobspec(fname):
     return JobSpec.model_validate_json(

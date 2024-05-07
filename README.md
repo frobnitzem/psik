@@ -205,6 +205,28 @@ Other than `script`, all job information is optional.
 However, the backend may reject jobs without enough
 resource and queue metadata.
 
+## Webhooks
+
+Your jobs can include a "callback" URL.
+If set, the callback will be sent `psik.Callback`
+messages whenever the job changes state.
+This includes changes to all states except the `new` state.
+
+Callbacks arrive via POST message.
+The body is encoded as 'application/json'.
+
+If the job included a `cb_secret` value, then
+the server can check callbacks to ensure they were
+not forged.  A valid callback will contain
+an `x-hub-signature-256` header that matches
+`psik.web.sign_message(message, header_value)`.
+The `psik.web.verify_signature` function does
+a verification for you.
+The scheme uses hmac256 the same way as [github webhooks](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries).
+
+Note: Those state changes originate from the jobscript
+itself calling `psik reached`.
+
 
 ## Comparison
 

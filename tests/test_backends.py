@@ -61,7 +61,7 @@ async def test_local(tmp_path):
     if len(job.history) > 3: # new, queued, started, canceled
         assert (job.base/'log'/'stderr.1').read_text() == 'Look out!\n'
 
-value = web.AppKey("value", Any)
+value = web.AppKey("value", None) # type: ignore[var-annotated]
 
 async def post_cb(request):
     if request.method != 'POST':
