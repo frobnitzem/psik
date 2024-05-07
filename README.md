@@ -46,14 +46,13 @@ An example configuration file is below:
 
     {
     "prefix": "/tmp/.psik",
-    "backend": "local",
-    "default_attr": {
-        "project_name": "project_automate",
-        "custom_attributes": {
-                "srun": {"--gpu-bind": "closest"},
-                "jsrun": {"-b": "packed:rs"}
-            }
+    "backend": {
+      "type": "local",
+      "project_name": "project_automate",
+      "attributes": {
+          "-b": "packed:rs"
         }
+      }
     }
 
 The "local" backend the just runs processes in the background
@@ -61,6 +60,9 @@ and is used for testing.
 The "at" backend is more suitable for running locally,
 and uses POSIX batch command.  However, it's broken on OSX.
 Adding more backends is easy.
+For HPC systems, "slurm" and "lsf" backends are implemented.
+In the future, facility-provided API-s should be added
+as backends.
 
 
 ## Writing a jobspec.json file
@@ -68,8 +70,7 @@ Adding more backends is easy.
 The `jobspec.json` file requires, at a minimum,
 a script, e.g.
 
-    { "name": "cowsay",
-      "script": "#!/usr/bin/env rc\necho moo\n"
+    { "script": "#!/usr/bin/env rc\necho moo\n"
     }
 
 Other properties (like a `ResourceSpec`) are listed in the
@@ -87,12 +88,11 @@ the following shell variables are defined during job execution:
             allocated to the job using the launcher specified.
 - nodes  -- number of nodes allocated to the job
 - base   -- base directory for psik's tracking of this job
-- jobndx -- job serial number provided at launch time
+- jobndx -- job step serial number (1-based) provided at launch time
 - jobid  -- backend-specific job id for this job (if available)
-- psik   -- the path to the psik program (or a literal "psik" if not found)
+- psik   -- the path to the psik program (or a literal "psik" if unknown)
+- rc     -- the path to an rc shell (or /usr/bin/env rc if unknown)
 
-These are not all available during the `pre_submit` script,
-but they are available within `event` (callback) scripts.
 See [psik/templates/partials/job\_body] for all the details.
 
 ## How it works
@@ -112,16 +112,6 @@ prefix/
           info is an integer correponding to a scheduler's jobid (for queued)
           or a return status code (other states)
       scripts/ - directory containing
-        pre_submit   - script run on the submitting node
-                       It is sourced during the submit script.
-                       It receives the jobndx as its only argument.
-                       Failure must be reported by returning nonzero,
-                       and should be accompanied by a message to stderr.
-                       Any exit from this script will prevent job submission.
-        on_active    - script to run from job.rc on start
-        on_completed - script to run from job.rc on successful exit
-        on_failed    - script to run from job.rc on failing exit
-        on_canceled  - script to run on cancelling node after cancellation succeeds
         submit       - Submit job.rc to the backend.
                        Submit is provided with the jobndx serial number as its
                        only argument.
@@ -133,7 +123,7 @@ prefix/
                        as arguments.
 
         job          - (job.rc) script run during the job.
-                       Its working directory is ../work, but templated
+                       Its working directory is usually ../work, but templated
                        as {{job.directory}}.  job.rc is invoked by submit and
                        provided with the jobndx serial number as
                        its only argument.
@@ -141,6 +131,7 @@ prefix/
         run          - user's run-script -- the payload invoked by job.rc
       work/ - directory where work is done
               may be a symbolic link to a node-local filesystem
+              (e.g. when JobSpec.directory was set manually)
       log/  - directory holding logs in the naming scheme,
            stdout.$jobndx - stdout and stderr logs from `run` portion of job.rc
            stderr.$jobndx - Note that jobndx is sequential from 1.
@@ -166,11 +157,13 @@ for a batch queue system that transfers across many backends:
 
 Psi\_k can also be used as a python package:
 
-    from psik import JobManager, JobSpec, JobAttributes, ResourceSpec
+    from psik import Config, JobManager, JobSpec, JobAttributes, ResourceSpec
 
-    mgr = JobManager("/proj/SB1/.psik", "slurm",
-                     defaults = JobAttributes(queue_name = "batch",
-                                              project_name = "plaid"))
+    cfg = Config(prefix="/proj/SB1/.psik", backend={
+                        "type": "slurm",
+                        "queue_name": "batch",
+                        "project_name": "plaid"})
+    mgr = JobManager(cfg)
     rspec = ResourceSpec(duration = "60",
                          process_count = 2,
                          gpu_cores_per_process=1
@@ -203,14 +196,15 @@ This example shows most of the useful settings for
 JobSpec information -- which makes up a majority of the code.
 Other than `script`, all job information is optional.
 However, the backend may reject jobs without enough
-resource and queue metadata.
+resource and queue metadata.  To avoid this, spend some time
+setting up your backend attributes in `$PSIK_CONFIG`.
 
 ## Webhooks
 
 Your jobs can include a "callback" URL.
-If set, the callback will be sent `psik.Callback`
+If set, the callback will be sent [`psik.Callback`](psik/models.py)
 messages whenever the job changes state.
-This includes changes to all states except the `new` state.
+This includes transitions into all states except the `new` state.
 
 Callbacks arrive via POST message.
 The body is encoded as 'application/json'.
@@ -252,12 +246,14 @@ to the data model, and three changes to the execution semantics:
   - ~~stdout\_path~~
   - ~~stderr\_path~~
   - resources : ResourceSpec = ResourceSpec()
-  - attributes : JobAttributes = JobAttributes()
-  - ~~pre\_launch~~
-  - _pre\_submit_ : str -- pre\_launch has been replaced with pre\_submit. It is a script, not a filename. It is sourced by the submit script before submitting job.rc.
+  - ~~attributes : JobAttributes~~
+  - backend : BackendConfig -- attributes has been renamed and modified slightly
+  - ~~pre\_launch~~ -- pre\_launch has been removed, since it is basically identical to launching two jobs in series
   - ~~post\_launch~~
-  - launcher = None
-  - _events_ : Dict[JobState, str] = {} -- callbacks
+  - ~~launcher~~ -- launcher has been removed and the `$mpirun` environment variable is defined within job scripts instead
+  - _callback_  -- a callback URL to which the executor can report job progress
+  - _cb_secret_ -- a secret token which the executor can use to sign its callbacks
+  - _client_secret_ -- used internally by a server to validate any webhooks received
 
 Stdin/stdout/stderr paths have been removed.  All input
 and output files are captured in a well-known location.
@@ -270,36 +266,36 @@ is run during the normal job execution.  It has access to
 several environment variables so it can arrange parallel
 execution itself.  See (`Environment during job execution`) below.
 
-The `events` tag is also new.  Rather than polling a job-queue
-backend, $\Psi_k$ inserts calls to the job's `scripts/on_{event}`
-scripts each time a job changes state.  These scripts
-are pre-filled with scripts from `JobSpec.events`, when
-they exist.  It is also possible for a user to modify the
-callback files directly.
+The `callback` field is also new.  Rather than polling a job-queue
+backend, $\Psi_k$ inserts calls to `$psik reached`
+each time a job changes state.  This logs the start of a new
+job state.
 
-The `ResourceSpec` and `JobAttributes` models are identical, except
-`ResourceSpec` is fixed at `psij.ResourceSpecV1`, and
-`duration` has been fixed as required job-time in units of minutes,
-and moved out of `JobAttributes` and into `ResourceSpec`.
+The `ResourceSpec` model is identical, except
+it is fixed at `psij.ResourceSpecV1`, and
+`duration` has been added (in fixed units of minutes).
+`BackendConfig` derives from `JobAttributes`, but contains
+only backend configuration values, not job attributes.
 
 ## Adding a new batch queue backend to Psi\_k
 
 Internally, $\Psi_k$ implements each backend by including three templates:
 
 psik/templates/
+
  * `<backend>/submit`  -- Submit a job to the queue.
                           Output to stderr is printed to the user's terminal.
                           On success, print only the backend's native job\id
                           to stdout and return 0.
                           On failure, must return nonzero. 
+
  * `<backend>/job`     -- Job submitted to the queue.
-                          Should annotate job resource and attributes
+                          Should translate job resource and backend config
                           in a way the backend understands.
-                          Must call psik logging and callbacks
-                          at appropriate points. 
+                          Must call psik logging at appropriate points. 
                           Must setup "Environment during job execution"
                           as specified above.
+
  * `<backend>/cancel`  -- Ask the backend to cancel the job.
-                          Must call psik logging and callbacks
-                          at appropriate points.
+                          Must call psik logging at appropriate points.
 
