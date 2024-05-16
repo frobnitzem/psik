@@ -9,7 +9,7 @@ import aiohttp
 from aiohttp.web import HTTPForbidden
 
 def verify_signature(payload_body : str, secret_token : str,
-                     signature_header : str) -> None:
+                     signature_header : Optional[str]) -> None:
     """Verify that the payload was sent from GitHub by validating SHA256.
 
     Raise and return 403 if not authorized.
