@@ -9,7 +9,7 @@ _logger = logging.getLogger(__name__)
 
 import pystache # type: ignore
 
-from . import actions
+actions = ["submit", "job", "cancel"]
 
 @cache
 def _load(backend : str, act : str) -> pystache.parsed.ParsedTemplate:

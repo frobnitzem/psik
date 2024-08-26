@@ -1,6 +1,7 @@
 if(~ $#jobndx 0) jobndx = -1
 if(~ $#base 0) base = '{{base}}'
-psik = '{{psik}}'
+psik = ({{psik}})
+rc = ({{rc}})
 
 $psik reached -- $base $jobndx active $jobid
 

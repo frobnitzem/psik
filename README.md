@@ -70,8 +70,7 @@ as backends.
 The `jobspec.json` file requires, at a minimum,
 a script, e.g.
 
-    { "script": "#!/usr/bin/env rc\necho moo\n"
-    }
+    { "script": "#!/usr/bin/env rc\necho moo\n" }
 
 Other properties (like a `ResourceSpec`) are listed in the
 [JobSpec datatype definition](psik/models.py).
@@ -299,3 +298,8 @@ psik/templates/
  * `<backend>/cancel`  -- Ask the backend to cancel the job.
                           Must call psik logging at appropriate points.
 
+To add a backend, implement all 3 templates.
+You probably also need an empty `__init__.py`
+file so that the templates are included in the package.
+This should be all you need for your new backend to be
+picked up by the `psik/templates/renderer.py`.
