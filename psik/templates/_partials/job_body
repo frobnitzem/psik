@@ -14,6 +14,7 @@ $base/scripts/run >$base/log/stdout.$jobndx \
 				  >[2]$base/log/stderr.$jobndx
 if(! ~ $status '' 0) {
     fail
+    exit 1
 }
 
 $psik reached -- $base $jobndx completed $jobid
