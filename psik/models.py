@@ -60,6 +60,7 @@ class JobSpec(BaseModel):
 
 # Data models specific to status routes:
 class Callback(BaseModel):
+    jobid   : str = Field(..., title="Job ID")
     jobndx  : int = Field(..., title="Sequential job index.")
     state   : JobState = Field(..., title="State reached by job.")
     info    : int = Field(default=0, title="Status code.")
