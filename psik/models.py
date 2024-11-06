@@ -12,6 +12,9 @@ class JobState(str, Enum):
     failed = "failed"
     canceled = "canceled"
 
+    def is_final(self) -> bool:
+        return self.value in ["completed", "failed", "canceled"]
+
 class ResourceSpec(BaseModel):
     duration              : int = Field(default=10, title="Max walltime of the job in minutes")  
     node_count            : Optional[int] = Field(default=None, title="Number of compute nodes allocated to job.")
