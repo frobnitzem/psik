@@ -87,6 +87,19 @@ def rm(stamps : List[str] = typer.Argument(...,
     raise typer.Exit(code=err)
 
 @app.command()
+def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+    """
+    (re)start a job.
+    """
+    setup_logging(v, vv)
+    config = load_config(cfg)
+    base = config.prefix
+
+    job = Job(base / str(stamp))
+    run_async( job.submit() )
+
+@app.command()
 def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
            v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
@@ -125,7 +138,8 @@ def ls(v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     async def show():
         async for job in mgr.ls():
             t, ndx, state, info = job.history[-1]
-            print(f"{job.stamp} {job.spec.name} {t} {ndx} {state} {info}")
+            #print(f"{job.base} {job.spec.name} {t} {ndx} {state} {info}")
+            print(f"{job.base} '{job.spec.name}' {state}/{ndx}")
     run_async(show())
 
 @app.command()

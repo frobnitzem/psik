@@ -106,7 +106,11 @@ class JobManager:
     async def ls(self) -> AsyncIterator[Job]:
         """ Async generator of Job entries.
         """
+        jobs = []
         async for jobdir in self.prefix.iterdir():
+            jobs.append(jobdir)
+        jobs.sort()
+        for jobdir in jobs:
             if await (jobdir / 'spec.json').is_file():
                 try:
                     yield await Job(jobdir)
