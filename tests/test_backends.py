@@ -100,8 +100,9 @@ async def test_local_cb(cb_server, aiohttp_server, tmp_path):
     assert len(job.history) == 2 # new, queued
     ans = server.app[value]
     print(f"test cb received: {ans}")
-    # {'jobndx': 1, 'state': 'queued', 'info': <pid>}
+    # {'jobid': '12.345', 'jobndx': 1, 'state': 'queued', 'info': <pid>}
     cb = Callback.model_validate(ans)
+    assert cb.jobid == job.stamp
     assert cb.jobndx == jobndx
     assert cb.state == JobState.queued
     assert cb.info == pid
@@ -112,6 +113,7 @@ async def test_local_cb(cb_server, aiohttp_server, tmp_path):
     print(f"test cb received: {ans}")
     # {'jobndx': 0, 'state': 'canceled', 'info': 0}
     cb = Callback.model_validate(ans)
+    assert cb.jobid == job.stamp
     assert cb.jobndx >= 0
     assert cb.state == JobState.canceled
     
