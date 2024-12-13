@@ -83,6 +83,7 @@ def rm(stamps : List[str] = typer.Argument(...,
             err += 1
             continue
         shutil.rmtree(jobdir)
+        print(f"Deleted {stamp}")
 
     raise typer.Exit(code=err)
 
@@ -98,6 +99,7 @@ def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
 
     job = Job(base / str(stamp))
     run_async( job.submit() )
+    print(f"Started {job.stamp}")
 
 @app.command()
 def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
@@ -111,6 +113,7 @@ def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
 
     job = Job(base / str(stamp))
     run_async( job.cancel() )
+    print(f"Canceled {job.stamp}")
 
 @app.command()
 def reached(base : str = typer.Argument(..., help="Job's base directory."),
@@ -152,6 +155,7 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
     If submit is True (default), the job will also be submitted
     to the backend's job queue.  Use --no-submit to prevent this.
     """
+
     setup_logging(v, vv)
     config = load_config(cfg)
     mgr = JobManager(config)
@@ -165,5 +169,10 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
         job = await mgr.create(spec)
         if submit:
             await job.submit()
+        return job
         
-    run_async( create_submit(spec, submit) )
+    job = run_async( create_submit(spec, submit) )
+    if submit:
+        print(f"Queued {job.stamp}")
+    else:
+        print(f"Created {job.stamp}")

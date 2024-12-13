@@ -115,6 +115,7 @@ class Job:
         jobndx, _ = self.summarize()
 
         ret, out, err = await runcmd(str(self.base / 'scripts' / 'submit'), str(jobndx))
+        # TODO: store this activity in the job's interaction log too.
         if ret != 0:
             raise SubmitException(err)
         try:
