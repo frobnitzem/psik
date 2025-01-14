@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Dict
 from functools import cache
 import os
 import sys
@@ -13,7 +13,7 @@ _rc_path   = "/usr/bin/env rc"
 
 class Config(BaseModel):
     prefix       : Path                               # prefix for psik output
-    backend      : BackendConfig = BackendConfig()    # backend configuration
+    backends     : Dict[str,BackendConfig] = {"default":BackendConfig()} # backend configurations
     psik_path    : Path = Field(default = _self_path) # path to psik executable
     rc_path      : str = Field(default = _rc_path)    # path to rc executable
 

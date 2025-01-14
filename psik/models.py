@@ -1,8 +1,12 @@
-from typing import Optional, Dict, Any
+from typing_extensions import Annotated
+from typing import Optional, Dict, Any, Tuple
 from enum import Enum
 from pathlib import Path
 
 from pydantic import BaseModel, Field, SecretStr
+from pydantic.types import StringConstraints
+
+JobID = Annotated[str, StringConstraints(pattern=r'^[0-9]+(\.[0-9]+)?$')]
 
 class JobState(str, Enum):
     new = "new"
@@ -49,7 +53,8 @@ class JobSpec(BaseModel):
     inherit_environment : bool  = Field(default=True, title="If this flag is set to False, the job starts with an empty environment.")
 
     resources   : ResourceSpec  = Field(default=ResourceSpec(), title="Job resource requirements")
-    backend     : BackendConfig = Field(default=BackendConfig(), title="Backend configuration values.")
+    backend     : str           = Field(default="default", title="Configured backend name")
+    attributes  : Dict[str,str] = Field(default={}, title="Backend attribute values.")
     # deps       : List[str]     = Field(default=[], title="Dependencies required before starting this job.")
     callback    : Optional[str] = Field(default=None, title="URL to send event notifications.")
     cb_secret   : Optional[SecretStr] = Field(default=None, title="hmac256 secret to sign updates sent to 'callback'")
@@ -58,10 +63,19 @@ class JobSpec(BaseModel):
 #j = JobSpec(script="mpirun hostname")
 #print(j.json())
 
+class Transition(BaseModel):
+    time:   float
+    jobndx: int
+    state:  JobState
+    info:   int
+
+    def fields(self) -> Tuple[float,int,str,int]:
+        return self.time, self.jobndx, self.state.value, self.info
+
 # Data models specific to status routes:
 class Callback(BaseModel):
-    jobid   : str = Field(..., title="Job ID")
-    jobndx  : int = Field(..., title="Sequential job index.")
+    jobid   : JobID = Field(..., title="Job ID")
+    jobndx  : int   = Field(..., title="Sequential job index.")
     state   : JobState = Field(..., title="State reached by job.")
     info    : int = Field(default=0, title="Status code.")
 

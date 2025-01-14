@@ -9,7 +9,7 @@ from time import time as timestamp
 
 from anyio import Path as aPath
 
-from .models import JobSpec, JobState, Callback
+from .models import JobSpec, JobState, Callback, Transition
 from .statfile import read_csv, append_csv
 from .exceptions import InvalidJobException, SubmitException
 from .web import post_json
@@ -29,7 +29,7 @@ class Job:
 
         self.valid = False
         self.spec = JobSpec(script="")
-        self.history : List[Tuple[float,int,JobState,int]] = []
+        self.history : List[Transition] = []
 
     # Await this class to read metadata from the filesystem.
     def __await__(self):
@@ -45,8 +45,11 @@ class Job:
         self.history = self.history[:0]
         for step in history: # parse history
             try:
-                self.history.append(( float(step[0]), int(step[1]),
-                                      JobState(step[2]), int(step[3]) ))
+                self.history.append(Transition(time=float(step[0]),
+                                               jobndx=int(step[1]),
+                                               state=JobState(step[2]),
+                                               info=int(step[3])
+                                   ))
             except Exception as e:
                 _logger.error("%s: Invalid row in status.csv: %s",
                               self.stamp, step)
@@ -59,10 +62,9 @@ class Job:
             info is usually the job_id (when known).
         """
         t = timestamp()
-        data  = (t, jobndx, state, info)
-        data1 = (t, jobndx, state.value, info)
+        data  = Transition(time=t, jobndx=jobndx, state=state, info=info)
         self.history.append( data )
-        await append_csv(self.base / 'status.csv', *data1)
+        await append_csv(self.base / 'status.csv', *data.fields())
         if not self.valid:
             base = self.base
             spec = await (base/'spec.json').read_text(encoding='utf-8')
@@ -91,8 +93,8 @@ class Job:
                  dict( (s, set()) for s in JobState )
         del status[JobState.new]
         for t, ndx, state, info in self.history:
-            if ndx >= jobndx:
-                jobndx = ndx+1
+            if t.ndx >= jobndx:
+                jobndx = t.ndx+1
             if state in status:
                 status[state].add(ndx)
 
