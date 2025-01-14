@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Dict
 from functools import cache
 import os
 import sys
@@ -13,7 +13,7 @@ _rc_path   = "/usr/bin/env rc"
 
 class Config(BaseModel):
     prefix       : Path                               # prefix for psik output
-    backend      : BackendConfig = BackendConfig()    # backend configuration
+    backends     : Dict[str,BackendConfig] = {"default":BackendConfig()} # backend configurations
     psik_path    : Path = Field(default = _self_path) # path to psik executable
     rc_path      : str = Field(default = _rc_path)    # path to rc executable
 
@@ -25,7 +25,7 @@ def load_config(path1 : Union[str, Path, None]) -> Config:
         if "PSIK_CONFIG" in os.environ:
             path = Path(os.environ["PSIK_CONFIG"])
         else:
-            path = Path(os.environ["HOME"]) / '.config' / cfg_name
+            path = Path(os.environ["VIRTUAL_ENV"], "/") / "etc" / cfg_name
     assert path.exists(), f"{cfg_name} is required to exist (tried {path})"
     config = Config.model_validate_json(path.read_text(encoding='utf-8'))
 

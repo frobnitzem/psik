@@ -10,12 +10,14 @@ import psik.templates as templates
 
 cfg = """{
   "prefix": "%s",
-  "backend": {
-    "type": "local",
-    "project_name": "my_proj",
-    "attributes": {
-        "--gpu-bind": "closest",
-        "-b": "packed:rs"
+  "backends": {
+    "default": {
+      "type": "local",
+      "project_name": "my_proj",
+      "attributes": {
+          "--gpu-bind": "closest",
+          "-b": "packed:rs"
+      }
     }
   }
 }
@@ -30,8 +32,9 @@ def write_config(tmp_path):
 def test_config():
     config = Config.model_validate_json(cfg % "/tmp")
     assert str(config.prefix) == "/tmp"
-    assert config.backend.type == "local"
-    assert isinstance(config.backend, BackendConfig)
+    assert len(config.backends) == 1
+    assert isinstance(config.backends["default"], BackendConfig)
+    assert config.backends["default"].type == "local"
 
 @pytest.mark.asyncio
 async def test_create(tmp_path):
