@@ -42,7 +42,7 @@ async def test_at(tmp_path):
 @pytest.mark.asyncio
 async def test_local(tmp_path):
     backend = BackendConfig(type = "local")
-    config = Config(prefix = tmp_path, backend = backend)
+    config = Config(prefix = tmp_path, backends = {"local":backend})
 
     mgr = JobManager(config)
     spec = JobSpec(name="hello",
@@ -50,7 +50,7 @@ async def test_local(tmp_path):
                echo Look out! >[1=2]
                sleep 2
                echo rawr >lion
-           """)
+           """, backend="local")
 
     job = await mgr.create(spec)
     jobndx, pid = await job.submit()
@@ -85,7 +85,7 @@ async def test_local_cb(cb_server, aiohttp_server, tmp_path):
     # note also server.app
 
     backend = BackendConfig(type = "local")
-    config = Config(prefix = tmp_path, backend = backend)
+    config = Config(prefix = tmp_path, backends = {"local":backend})
 
     mgr = JobManager(config)
     spec = JobSpec(name = "hello",
@@ -94,7 +94,7 @@ async def test_local_cb(cb_server, aiohttp_server, tmp_path):
                    echo Look out! >[1=2]
                    sleep 2
                    echo rawr >lion
-           """)
+           """, backend="local")
 
     job = await mgr.create(spec)
     jobndx, pid = await job.submit()

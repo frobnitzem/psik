@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, Tuple
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, ConfigDict
 from pydantic.types import StringConstraints
 
 JobID = Annotated[str, StringConstraints(pattern=r'^[0-9]+(\.[0-9]+)?$')]
@@ -38,6 +38,7 @@ class ResourceSpec(BaseModel):
 # so they should not include API-unsafe values (e.g. psik path,
 # server hostname, etc.)
 class BackendConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     type              : str = "local"
     queue_name        : Optional[str] = None
     project_name      : Optional[str] = None
@@ -45,6 +46,7 @@ class BackendConfig(BaseModel):
     attributes        : Dict[str,str] = {} # backend config. options
 
 class JobSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name        : Optional[str] = Field(default=None, title="Job name")
     directory   : Optional[str] = Field(default=None, title="Job run directory")
     script      : str = Field(..., title="Shell / shebang script to execute")
