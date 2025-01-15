@@ -87,16 +87,17 @@ class Job:
             
             returns (next available jobndx, mapping from state to jobndx)
         """
-        jobndx = 1
+        jobndx = 1 # largest jobndx seen plus 1
 
         status : Dict[JobState, Set[int]] = \
                  dict( (s, set()) for s in JobState )
         del status[JobState.new]
-        for t, ndx, state, info in self.history:
-            if t.ndx >= jobndx:
-                jobndx = t.ndx+1
-            if state in status:
-                status[state].add(ndx)
+        for t in self.history:
+            ndx = t.jobndx
+            if ndx >= jobndx:
+                jobndx = ndx+1
+            if t.state in status:
+                status[t.state].add(ndx)
 
         # TODO: sanity checks to ensure jobs passed through queued
         # before reaching other states, cancelled/failed/completed
@@ -137,9 +138,11 @@ class Job:
         await self.read_info()
 
         native_ids = {}
-        for t, ndx, state, info in self.history:
+        for t in self.history:
+            ndx = t.jobndx
+            state = t.state
             if state == JobState.queued:
-                native_ids[ndx] = info
+                native_ids[ndx] = t.info
             elif state == JobState.completed:
                 del native_ids[ndx]
             elif state == JobState.failed:

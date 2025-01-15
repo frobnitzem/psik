@@ -5,7 +5,7 @@ from typing import Any
 from aiohttp import web
 
 from psik.manager import JobManager
-from psik.models import JobSpec, JobState, BackendConfig, Callback
+from psik.models import JobSpec, JobState, BackendConfig, Callback, Transition
 from psik.config import Config
 from psik.templates import list_backends
 
@@ -33,6 +33,7 @@ async def test_at(tmp_path):
     assert len(job.history) == 2 # new, queued
     await job.cancel()
     assert len(job.history) > 2 # new, queued, canceled
+    assert isinstance(job.history[0], Transition)
     
     print(job.history)
     if len(job.history) > 3: # new, queued, started, canceled

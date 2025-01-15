@@ -56,7 +56,7 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
         print()
         print("    time ndx state info")
         for line in job.history:
-            print("    %.3f %3d %10s %8d" % line)
+            print("    %.3f %3d %10s %8d" % (line.time, line.jobndx, line.state.value, line.info))
     run_async(stat())
 
 @app.command()
