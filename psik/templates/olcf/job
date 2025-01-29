@@ -4,7 +4,7 @@ job:
 {{/job.name}}
   current_working_directory: "{{job.directory}}"
   environment:
-  - USING_PSIK=true
+  - USING_PSIK: true
 {{#job.environment}}
   - "{{name}}": "{{value}}"
 {{/job.environment}}
@@ -56,7 +56,7 @@ job:
     # setup fixed job env variables
     mpirun = srun
     nodes  = $SLURM_JOB_NUM_NODES
-    jobndx = $1
+    jobndx = %(jobndx)d
     jobid  = $SLURM_JOB_ID
     base   = '{{base}}'
 

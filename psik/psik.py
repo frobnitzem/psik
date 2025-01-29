@@ -108,6 +108,47 @@ def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     print(f"Started {job.stamp}")
 
 @app.command()
+def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handle.")],
+              jobndx: Annotated[int, typer.Argument(help="Sequential job index")],
+              jobspec: str = Annotated[str, typer.Argument(help="Jobspec json")],
+              v: V1 = False, vv : V2 = False,
+              cfg : CfgArg = None):
+    """
+    (re)start a job directly into the "active" state.
+    This method assumes resources are already allocated and
+    we are inside a running "job-script".
+
+    Hence, if the job dir. doesn't exist, it is created.
+    If it does exist, reached(queued) and reached(active) are called
+    in succession.
+    """
+    setup_logging(v, vv)
+    config = load_config(cfg)
+    #base = config.prefix
+    #job = Job(base / str(stamp))
+    #run_async( job.submit() )
+    #print(f"Started {job.stamp}")
+
+    mgr = JobManager(config)
+    try:
+        spec = JobSpec.model_validate_json(jobspec)
+    except Exception as e:
+        _logger.exception("Error parsing JobSpec from cmd-line argument.")
+        raise typer.Exit(code=1)
+
+    async def create_submit(spec, submit):
+        job = await mgr.create(spec)
+        if submit:
+            await job.submit()
+        return job
+        
+    job = run_async( create_submit(spec, submit) )
+    if submit:
+        print(f"Queued {job.stamp}")
+    else:
+        print(f"Created {job.stamp}")
+
+@app.command()
 def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
            v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """

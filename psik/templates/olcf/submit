@@ -30,13 +30,14 @@ async def main(job, token):
 if __name__=="__main__":
     argv = sys.argv
 
-    # TODO: embed jobindex somehow into the run
     jobndx = int(argv[1])
-
     with open("{{base}}/scripts/job") as f:
         job = yaml.safe_load(f)
+        job['script'] = job['script'] % { 'jobndx': jobndx }
 
     token = os.getenv("OLCF_TOKEN")
+    if token is None:
+        raise ValueError("OLCF_TOKEN env var must be defined")
     print("submitting job:")
     print( json.dumps(job, indent=2) )
 
