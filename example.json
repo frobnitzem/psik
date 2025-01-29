@@ -1,4 +1,4 @@
 { "name": "print",
-  "script": "echo 'This is an example job.'\necho $mpirun\n echo $nodes\n echo $base\n echo $jobndx\n echo $jobid\n echo $psik\n echo $rc\n",
+  "script": "echo 'This is an example job.'\necho $mpirun\n echo $nodes\n echo $base\n echo $jobndx\n echo $jobid\n echo $psik\n echo $rc\npwd\nps -a\nls\n",
   "callback": "http://127.0.0.1:3000/echo"
 }

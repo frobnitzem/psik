@@ -1,5 +1,6 @@
 from typing import Union, Dict, Tuple, List, Optional, Set
 from io import StringIO
+import sys
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ from anyio import Path as aPath
 
 from .models import JobSpec, JobState, Callback, Transition
 from .statfile import read_csv, append_csv
-from .exceptions import InvalidJobException, SubmitException
+from .exceptions import InvalidJobException, SubmitException, CallbackException
 from .web import post_json
 
 class Job:
@@ -60,6 +61,8 @@ class Job:
                       info : int = 0) -> bool:
         """ Mark job as having reached the given state.
             info is usually the job_id (when known).
+
+            May throw CallbackException.
         """
         t = timestamp()
         data  = Transition(time=t, jobndx=jobndx, state=state, info=info)
@@ -77,9 +80,13 @@ class Job:
             token = None
             if self.spec.cb_secret:
                 token = self.spec.cb_secret.get_secret_value()
-            return await post_json(self.spec.callback,
-                                   cb.model_dump_json(),
-                                   token) is not None
+            try:
+                return await post_json(self.spec.callback,
+                                       cb.model_dump_json(),
+                                       token) is not None
+            except Exception as e:
+                msg = f"{self.spec.callback} <- {cb}"
+                raise CallbackException(msg) from e
         return True
 
     def summarize(self) -> Tuple[int, Dict[JobState, Set[int]]]:
@@ -127,7 +134,10 @@ class Job:
             _logger.error('%s: submit script returned unparsable result: %s',
                           self.stamp, out)
             native_job_id = 0
-        await self.reached(jobndx, JobState.queued, native_job_id)
+        try:
+            await self.reached(jobndx, JobState.queued, native_job_id)
+        except CallbackException as e:
+            print("Error sending callback: ", str(e), file=sys.stderr)
         return jobndx, native_job_id
 
     async def cancel(self) -> None:
