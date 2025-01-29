@@ -31,8 +31,10 @@ def sign_message(payload_body : str, secret_token : str) -> str:
                            digestmod=hashlib.sha256)
     return "sha256=" + hash_object.hexdigest()
 
-async def get_json(url : str,
-                   token : Optional[str] = None) -> Optional[Any]:
+""" Works, but not used by psik.
+
+async def get_json(url: str,
+                   token: Optional[str] = None) -> Optional[Any]:
     headers = {}
     headers['Accept'] = 'application/json'
     async with aiohttp.ClientSession() as session:
@@ -46,6 +48,7 @@ async def get_json(url : str,
             #print("Content-type:", response.headers['content-type'])
             return await response.json()
             #return await response.text()
+"""
 
 async def post_json(url : str,
                     info : str,
@@ -63,14 +66,3 @@ async def post_json(url : str,
             if response.headers['content-type'] == 'application/json':
                 return await response.json()
             return await response.text()
-
-if __name__=="__main__":
-    import asyncio
-    async def f():
-        ans = await post_json("http://127.0.0.1:8000/compute/jobs/default",
-                '{"name": "hello", "script": "echo hello; pwd"}',
-                "secret token")
-        print(ans)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(f())
-
