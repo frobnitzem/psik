@@ -1,0 +1,18 @@
+#!/usr/bin/env rc
+# bwrap submission forks bubble-wrapped job into a background process
+cd '{{job.directory}}' || exit 1
+#psdir=`{dirname `{dirname '{{psik}}'}}
+#   --unshare-cgroup
+#   --ro-bind /bin /bin \
+#   --ro-bind /lib /lib \
+#   --ro-bind /lib64 /lib64 \
+#   --ro-bind /usr /usr \
+#   --ro-bind $psdir $psdir \
+
+bwrap --unshare-pid --unshare-user \
+    --ro-bind / / \
+    --bind '{{base}}' '{{base}}' \
+    --bind '{{job.directory}}' '{{job.directory}}' \
+    --dev /dev --proc /proc \
+    '{{base}}/scripts/job' $* >>'{{base}}/log/messages' >[2=1] &
+echo $apid

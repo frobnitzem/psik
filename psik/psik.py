@@ -18,6 +18,7 @@ from .models import (
         JobSpec,
         load_jobspec
 )
+from .exceptions import CallbackException
 
 def run_async(f):
     loop = asyncio.get_event_loop()
@@ -38,8 +39,8 @@ CfgArg = Annotated[Optional[Path], typer.Option("--config",
                    help="Config file path [default ~/.config/psik.json].")]
 
 @app.command()
-def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
-           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+def status(stamps: List[str] = typer.Argument(..., help="Job's timestamp / handle."),
+           v: V1 = False, vv: V2 = False, cfg: CfgArg = None):
     """
     Read job status information and history.
     """
@@ -47,7 +48,7 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     config = load_config(cfg)
     base = config.prefix
 
-    async def stat():
+    async def stat(stamp):
         job = await Job(base / stamp)
         #print(job.spec.dump_model_json(indent=4))
         print(job.spec.name)
@@ -57,7 +58,12 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
         print("    time ndx state info")
         for line in job.history:
             print("    %.3f %3d %10s %8d" % (line.time, line.jobndx, line.state.value, line.info))
-    run_async(stat())
+
+    async def loop_stat():
+        for stamp in stamps:
+            await stat(stamp)
+
+    run_async(loop_stat())
 
 @app.command()
 def rm(stamps : List[str] = typer.Argument(...,
@@ -126,15 +132,25 @@ def reached(base : str = typer.Argument(..., help="Job's base directory."),
     instead called during a job's (pre-filled) callbacks.
     """
     job = Job(base)
-    ok = run_async( job.reached(jobndx, state, info) )
+    try:
+        ok = run_async( job.reached(jobndx, state, info) )
+    except CallbackException as e:
+        print("Error sending callback: ", str(e), file=sys.stderr)
+        ok = False
     if not ok:
         raise typer.Exit(code=1)
 
 @app.command()
-def ls(v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+def ls(stamps: List[str] = typer.Argument(None),
+       v: V1 = False,
+       vv: V2 = False,
+       cfg: CfgArg = None):
     """
     List jobs.
     """
+    if len(stamps) > 0:
+        return status(stamps, v, vv, cfg)
+
     setup_logging(v, vv)
     config = load_config(cfg)
     mgr = JobManager(config)

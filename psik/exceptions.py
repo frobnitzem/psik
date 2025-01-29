@@ -8,3 +8,6 @@ class InvalidJobException(AnException):
 
 class SubmitException(AnException):
     pass
+
+class CallbackException(AnException):
+    pass

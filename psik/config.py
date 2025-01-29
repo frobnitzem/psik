@@ -29,7 +29,7 @@ def load_config(path1 : Union[str, Path, None]) -> Config:
         if "PSIK_CONFIG" in os.environ:
             path = Path(os.environ["PSIK_CONFIG"])
         else:
-            path = Path(os.environ["VIRTUAL_ENV"], "/") / "etc" / cfg_name
+            path = Path(os.environ.get("VIRTUAL_ENV", "/")) / "etc" / cfg_name
     assert path.exists(), f"{cfg_name} is required to exist (tried {path})"
     config = Config.model_validate_json(path.read_text(encoding='utf-8'))
 
