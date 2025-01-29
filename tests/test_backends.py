@@ -2,12 +2,12 @@ import sys
 import pytest
 from typing import Any
 
-from aiohttp import web
-
 from psik.manager import JobManager
 from psik.models import JobSpec, JobState, BackendConfig, Callback, Transition
 from psik.config import Config
 from psik.templates import list_backends
+
+from .test_web import cb_server, cb_value
 
 def test_backends():
     backends = list_backends()
@@ -62,22 +62,6 @@ async def test_local(tmp_path):
     if len(job.history) > 3: # new, queued, started, canceled
         assert (job.base/'log'/'stderr.1').read_text() == 'Look out!\n'
 
-value = web.AppKey("value", None) # type: ignore[var-annotated]
-
-async def post_cb(request):
-    if request.method != 'POST':
-        raise KeyError(request.method)
-    request.app[value] = await request.json()
-    #body = await request.post()
-    #print(f"test cb received: {body}")
-    return web.Response(body=b'OK')
-
-@pytest.fixture
-def cb_server(event_loop, aiohttp_server):
-    app = web.Application()
-    app.router.add_post('/callback', post_cb)
-    return event_loop.run_until_complete(aiohttp_server(app))
-
 @pytest.mark.asyncio
 async def test_local_cb(cb_server, aiohttp_server, tmp_path):
     server = cb_server
@@ -99,7 +83,7 @@ async def test_local_cb(cb_server, aiohttp_server, tmp_path):
     job = await mgr.create(spec)
     jobndx, pid = await job.submit()
     assert len(job.history) == 2 # new, queued
-    ans = server.app[value]
+    ans = server.app[cb_value]
     print(f"test cb received: {ans}")
     # {'jobid': '12.345', 'jobndx': 1, 'state': 'queued', 'info': <pid>}
     cb = Callback.model_validate(ans)
@@ -110,7 +94,7 @@ async def test_local_cb(cb_server, aiohttp_server, tmp_path):
 
     await job.cancel()
     assert len(job.history) > 2 # new, queued, canceled
-    ans = server.app[value]
+    ans = server.app[cb_value]
     print(f"test cb received: {ans}")
     # {'jobndx': 0, 'state': 'canceled', 'info': 0}
     cb = Callback.model_validate(ans)

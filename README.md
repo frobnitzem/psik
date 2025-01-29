@@ -46,16 +46,18 @@ An example configuration file is below:
 
     {
     "prefix": "/tmp/.psik",
-    "backend": {
-      "type": "local",
-      "project_name": "project_automate",
-      "attributes": {
-          "-b": "packed:rs"
+    "backends": {
+      "default": {
+        "type": "local",
+        "project_name": "project_automate",
+        "attributes": {
+            "-b": "packed:rs"
+          }
         }
       }
     }
 
-The "local" backend the just runs processes in the background
+The "local" backend type just runs processes in the background
 and is used for testing.
 The "at" backend is more suitable for running locally,
 and uses POSIX batch command.  However, it's broken on OSX.
@@ -70,7 +72,9 @@ as backends.
 The `jobspec.json` file requires, at a minimum,
 a script, e.g.
 
-    { "script": "#!/usr/bin/env rc\necho moo\n" }
+    { "script": "#!/usr/bin/env rc\necho moo\n",
+      "backend": "default"
+    }
 
 Other properties (like a `ResourceSpec`) are listed in the
 [JobSpec datatype definition](psik/models.py).
@@ -101,8 +105,7 @@ for storing information about each job using a directory tree:
 
 ```
 prefix/
-  backend/
-    `<timestamp>`/
+   `<timestamp>`/
       spec.json  - JobSpec data
       status.csv - timestamp,jobndx,JobState,info -- history for job state
           timestamp is a system local time (output of time.time() call)
@@ -158,10 +161,10 @@ Psi\_k can also be used as a python package:
 
     from psik import Config, JobManager, JobSpec, JobAttributes, ResourceSpec
 
-    cfg = Config(prefix="/proj/SB1/.psik", backend={
+    cfg = Config(prefix="/proj/SB1/.psik", backends={"default":{
                         "type": "slurm",
                         "queue_name": "batch",
-                        "project_name": "plaid"})
+                        "project_name": "plaid"}})
     mgr = JobManager(cfg)
     rspec = ResourceSpec(duration = "60",
                          process_count = 2,
@@ -246,7 +249,7 @@ to the data model, and three changes to the execution semantics:
   - ~~stderr\_path~~
   - resources : ResourceSpec = ResourceSpec()
   - ~~attributes : JobAttributes~~
-  - backend : BackendConfig -- attributes has been renamed and modified slightly
+  - backend : str -- name of backend configured in `psik.json`
   - ~~pre\_launch~~ -- pre\_launch has been removed, since it is basically identical to launching two jobs in series
   - ~~post\_launch~~
   - ~~launcher~~ -- launcher has been removed and the `$mpirun` environment variable is defined within job scripts instead
@@ -303,3 +306,29 @@ You probably also need an empty `__init__.py`
 file so that the templates are included in the package.
 This should be all you need for your new backend to be
 picked up by the `psik/templates/renderer.py`.
+
+# Developing
+
+To develop on psik's source code, clone our
+repo on github and check out your local copy.
+
+    git clone ssh://git@github.com/your-userid/psik.git
+    cd psik
+    git remote add upstream https://github.com/frobnitzem/psik.git
+
+Then install its dependencies into a virtual environment
+managed by the poetry tool.
+
+    pip3 install poetry
+    poetry install
+    poetry run pytest --cov=psik tests/ --cov-report html
+
+Then create a new branch and edit away.
+
+    git checkout -b new_feature
+    git commit -a
+    git push -u origin new_feature
+
+Don't forget to create an issue and/or pull request with
+your suggestions.
+

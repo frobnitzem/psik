@@ -1,7 +1,33 @@
 import pytest
 
-from aiohttp.web import HTTPClientError
-from psik.web import sign_message, verify_signature
+from aiohttp import web
+from aiohttp.web import HTTPClientError, HTTPForbidden
+
+from psik.web import (
+    sign_message,
+    verify_signature,
+    post_json,
+    #get_json,
+)
+
+### test fixture for accepting a callback ###
+cb_value = web.AppKey("value", None) # type: ignore[var-annotated]
+
+async def post_cb(request):
+    if request.method != 'POST':
+        raise KeyError(request.method)
+    request.app[cb_value] = await request.json()
+    #body = await request.post()
+    #print(f"test cb received: {body}")
+    return web.Response(text='OK', status=200)
+    #return web.Response(body=b'"OK"', content_type="application/json", status=200)
+
+@pytest.fixture
+def cb_server(event_loop, aiohttp_server):
+    app = web.Application()
+    app.router.add_post('/callback', post_cb)
+    return event_loop.run_until_complete(aiohttp_server(app))
+### end fixture ###
 
 def test_sign():
     ans = sign_message("Hello, World!", "It's a Secret to Everybody")
@@ -14,3 +40,14 @@ def test_verify():
         verify_signature("X", "X", ans)
     with pytest.raises(HTTPClientError):
         verify_signature("Y", "Y", ans)
+    with pytest.raises(HTTPForbidden):
+        verify_signature("X", "Y", None)
+
+@pytest.mark.asyncio
+async def test_local_cb(cb_server, aiohttp_server):
+    ans = await post_json(str(cb_server.make_url("/callback")),
+                '{"name": "hello", "script": "echo hello; pwd"}',
+
+                "secret token")
+    assert isinstance(cb_server.app[cb_value], dict)
+    assert cb_server.app[cb_value]["name"] == "hello"
