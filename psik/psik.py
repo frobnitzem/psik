@@ -141,7 +141,7 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
         if submit:
             await job.submit()
         return job
-        
+
     job = run_async( create_submit(spec, submit) )
     if submit:
         print(f"Queued {job.stamp}")

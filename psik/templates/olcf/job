@@ -51,13 +51,13 @@ job:
   standard_input: /dev/null
   standard_output: /dev/null
   standard_error: /dev/null
-  script: |
-    #!/usr/bin/env rc
-    # setup fixed job env variables
-    mpirun = srun
-    nodes  = $SLURM_JOB_NUM_NODES
-    jobndx = %(jobndx)d
-    jobid  = $SLURM_JOB_ID
-    base   = '{{base}}'
+  script: psik hot-start {{job.stamp}} %(jobndx)d '{{jobspec}}'
 
-    {{>job_body}}
+#   #!/usr/bin/env rc
+#   # setup fixed job env variables
+#   mpirun = srun
+#   nodes  = $SLURM_JOB_NUM_NODES
+#   jobndx = %(jobndx)d
+#   jobid  = $SLURM_JOB_ID
+#   base   = '{{base}}'
+#   {{>job_body}}
