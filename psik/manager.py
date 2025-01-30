@@ -1,4 +1,4 @@
-from typing import Union, Dict, Tuple, List, Any
+from typing import Union, Dict, Tuple, List, Any, Optional
 from collections.abc import AsyncIterator
 import logging
 _logger = logging.getLogger(__name__)
@@ -64,18 +64,26 @@ class JobManager:
 
         return base
 
-    async def create(self, jobspec : JobSpec) -> Job:
+    async def create(self, jobspec: JobSpec,
+                           base: Optional[aPath] = None) -> Job:
         """Create a new job from the given JobSpec
 
            This function renders job templates,
            then calls create_job.
+
+           If base is specified, any path at that directory
+           is overwritten.
         """
-        base = await self._alloc(jobspec) # allocate a base dir for this job
+        if base is None: # allocate a base dir for this job
+            base = await self._alloc(jobspec)
+        else:
+            await base.mkdir(exist_ok=True)
         backend = self.config.backends[jobspec.backend]
 
         data : Dict[str,Any] = {
                 'job': jobspec.model_dump(),
                 'base': str(base),
+                'stamp': base.name,
                 'psik': self.config.psik_path,
                 'rc': self.config.rc_path
                }

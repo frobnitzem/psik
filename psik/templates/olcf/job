@@ -2,32 +2,33 @@ job:
 {{#job.name}}
   name: "{{.}}"
 {{/job.name}}
-  current_working_directory: "{{job.directory}}"
+  current_working_directory: "/tmp" #"{{job.directory}}"
   environment:
-  - USING_PSIK: true
+  - "USING_PSIK=true"
 {{#job.environment}}
-  - "{{name}}": "{{value}}"
+  - "{{name}}={{value}}"
 {{/job.environment}}
 
 {{#job.resources}}
 {{#duration}}
   time_limit:
-    number: "{{.}}"
+    number: {{.}}
     set: true
 {{/duration}}
 {{#node_count}}
   nodes: "{{.}}"
 {{/node_count}}
 {{#process_count}}
-  ntasks: "{{.}}"
+  {{! Not currently accepted by Facility API, so will throw an error. }}
+  ntasks: {{.}}
 {{/process_count}}
 {{#processes_per_node}}
-  tasks_per_node: "{{.}}"
+  tasks_per_node: {{.}}
 {{/processes_per_node}}
-{{!not present? #gpu_cores_per_process
-  gpus_per_task=...
- /gpu_cores_per_process}}
-
+{{#gpu_cores_per_process}}
+  {{! Not currently accepted by Facility API, so will throw an error. }}
+  gpus_per_task: {{.}}
+{{/gpu_cores_per_process}}
 {{!SLURM has different meanings for 'CPU', depending on the exact allocation plugin being
    used. The default plugin uses the literal meaning for 'CPU' - physical processor. The
    consumable resource allocation plugin, on the other hand, equates 'CPU' to a thread (if
@@ -51,13 +52,4 @@ job:
   standard_input: /dev/null
   standard_output: /dev/null
   standard_error: /dev/null
-  script: psik hot-start {{job.stamp}} %(jobndx)d '{{jobspec}}'
-
-#   #!/usr/bin/env rc
-#   # setup fixed job env variables
-#   mpirun = srun
-#   nodes  = $SLURM_JOB_NUM_NODES
-#   jobndx = %(jobndx)d
-#   jobid  = $SLURM_JOB_ID
-#   base   = '{{base}}'
-#   {{>job_body}}
+  script: psik hot-start {{stamp}} %(jobndx)d '%(jobspec)s'
