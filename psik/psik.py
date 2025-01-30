@@ -110,7 +110,8 @@ def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
 @app.command()
 def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handle.")],
               jobndx: Annotated[int, typer.Argument(help="Sequential job index")],
-              jobspec: str = Annotated[str, typer.Argument(help="Jobspec json")],
+              jobspec: Annotated[str, typer.Argument(help="Jobspec json")],
+              backend: Annotated[str, typer.Option(help="Local backend used to template run-script")] = "default",
               v: V1 = False, vv : V2 = False,
               cfg : CfgArg = None):
     """
@@ -124,29 +125,30 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
     """
     setup_logging(v, vv)
     config = load_config(cfg)
-    #base = config.prefix
-    #job = Job(base / str(stamp))
-    #run_async( job.submit() )
-    #print(f"Started {job.stamp}")
 
-    mgr = JobManager(config)
     try:
         spec = JobSpec.model_validate_json(jobspec)
     except Exception as e:
         _logger.exception("Error parsing JobSpec from cmd-line argument.")
         raise typer.Exit(code=1)
 
-    async def create_submit(spec, submit):
-        job = await mgr.create(spec)
-        if submit:
-            await job.submit()
-        return job
+    spec.backend = backend
 
-    job = run_async( create_submit(spec, submit) )
-    if submit:
-        print(f"Queued {job.stamp}")
-    else:
-        print(f"Created {job.stamp}")
+    async def do_hotstart():
+        job = Job(config.prefix / str(stamp))
+        if not await job.base.is_dir():
+            # create if not available
+            mgr = JobManager(config)
+            job = await mgr.create(spec, job.base)
+        else: # load
+            job = await job
+
+        ret, out, err = await runcmd(str(job.base / 'scripts' / 'run'), str(jobndx))
+        # TODO: store this activity in the job's interaction log too.
+        if ret != 0:
+            raise SubmitException(err)
+
+    run_async( do_hotstart() )
 
 @app.command()
 def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
@@ -189,7 +191,7 @@ def ls(stamps: List[str] = typer.Argument(None),
     """
     List jobs.
     """
-    if len(stamps) > 0:
+    if stamps:
         return status(stamps, v, vv, cfg)
 
     setup_logging(v, vv)
