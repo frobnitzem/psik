@@ -4,11 +4,12 @@
 #curl -X POST \
 #  -H 'Authorization: '$OLCF_TOKEN \
 #  -H 'Content-Type: application/json' \
-#  -d @'{{base}}/scripts/job' \
+#  -d '@{{base}}/scripts/job' \
 #  https://s3m.apps.olivine.ccs.ornl.gov/slurm/v0.0.41/defiant/job/submit
 #
 # except that job is converted from yaml to json
-# and job['job']['script'] is %-formatted.
+# and job['job']['script'] is %-formatted to add jobndx
+# and `psik hot-start` to the script.
 #
 import sys
 import os

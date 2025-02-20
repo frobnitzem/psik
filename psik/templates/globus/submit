@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+
+from globus_compute_sdk import Executor, Client
+
+def runcmd(cmd):
+    import os
+    return os.popen(cmd).read()
+
+batch_endpoint_id = 'aaa-bbb-ccc-ddd'
+
+sbatch = """#SBATCH -J globus_job
+#SBATCH -t 10
+#SBATCH -o %x-%j.out
+#SBATCH -N 2
+"""
+
+scheduler_options = { "ACCOUNT": "csc266",
+                      "OPTIONS": sbatch,
+                      "COMMAND": "export PATH=\"$PATH:/usr/sbin\""
+                    }
+
+client = Client()
+client.get_endpoint_status(batch_endpoint_id)
+func_id = client.register_function(runcmd)
+task_id = client.run("srun hostname", endpoint_id=batch_endpoint_id, function_id=func_id)
+
+#with Executor(endpoint_id = batch_endpoint_id,
+#              user_endpoint_config = scheduler_options) as gce:
+#    future = gce.submit(runcmd, 'srun -N $SLURM_JOB_NUM_NODES printenv')
+#    print( future.result() )

@@ -21,13 +21,13 @@ aiohttp = ">=3.8.0"
 pyyaml = { version="*", optional = true }
 authlib = { version="*", optional = true }
 globus-compute-sdk = { version="*", optional = true }
-sfapi_client = { version="*", optional = true }
+#sfapi_client = { version="*", optional = true }
 
 [tool.poetry.extras]
 yaml = ["pyyaml"]
 facilities = ["pyyaml",
               "globus-compute-sdk",
-              "sfapi_client"]
+              "authlib"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=6.1.0"
