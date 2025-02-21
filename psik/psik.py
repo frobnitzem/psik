@@ -11,7 +11,7 @@ _logger = logging.getLogger(__name__)
 import typer
 
 from .config import load_config
-from .job import Job
+from .job import Job, runcmd
 from .manager import JobManager
 from .models import (
         JobState,
@@ -121,7 +121,10 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
 
     Hence, if the job dir. doesn't exist, it is created.
     If it does exist, reached(queued) and reached(active) are called
-    in succession.
+    in succession.  This program runs the `scripts/job` script
+    synchronously, returning only when it exits.  Note
+    that `job` itself runs the reached(active) and
+    reached(complete/failed) calls..
     """
     setup_logging(v, vv)
     config = load_config(cfg)
@@ -136,19 +139,23 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
 
     async def do_hotstart():
         job = Job(config.prefix / str(stamp))
-        if not await job.base.is_dir():
+        if not await job.base.is_dir() or \
+                not await (job.base/'spec.json').exists():
+            await job.base.mkdir(exist_ok=True)
+            # Ensure working directory exists.
+            if spec.directory is None:
+                workdir = job.base / 'work'
+                await workdir.mkdir()
+                spec.directory = str(workdir)
             # create if not available
             mgr = JobManager(config)
             job = await mgr.create(spec, job.base)
         else: # load
             job = await job
 
-        ret, out, err = await runcmd(str(job.base / 'scripts' / 'run'), str(jobndx))
-        # TODO: store this activity in the job's interaction log too.
-        if ret != 0:
-            raise SubmitException(err)
+        return await job.hot_start(jobndx)
 
-    run_async( do_hotstart() )
+    sys.exit(run_async( do_hotstart() ))
 
 @app.command()
 def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
@@ -198,10 +205,12 @@ def ls(stamps: List[str] = typer.Argument(None),
     config = load_config(cfg)
     mgr = JobManager(config)
     async def show():
+        print(f"{'jobid':<15} {'state':>10} jobndx info name")
         async for job in mgr.ls():
-            t, ndx, state, info = job.history[-1]
-            #print(f"{job.base} {job.spec.name} {t} {ndx} {state} {info}")
-            print(f"{job.base} '{job.spec.name}' {state}/{ndx}")
+            #line.time, line.jobndx, line.state.value, line.info))
+            h = job.history[-1]
+            #print(f"{job.base} {job.spec.name} {h.time} {h.jobndx} {h.state.value} {h.info}")
+            print(f"{job.stamp:<15} {h.state.value:<10} {h.jobndx:>6} {h.info:>4} {job.spec.name}")
     run_async(show())
 
 @app.command()

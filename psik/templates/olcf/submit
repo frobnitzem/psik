@@ -62,6 +62,8 @@ if __name__=="__main__":
     jobndx = int(argv[1])
     with open("{{base}}/scripts/job", "r", encoding="utf-8") as f:
         job = yaml.safe_load(f)
+        # TODO: copy files from job['directory'] to remote!
+        job['directory'] = None # unset this
         # ensure nodes is set
         job['job']['nodes'] = job['job'].get("nodes", "1")
         job['job']['script'] = job['job']['script'] % {
