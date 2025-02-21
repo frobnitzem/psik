@@ -153,6 +153,7 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
         else: # load
             job = await job
 
+        os.chdir(job.spec.directory)
         return await job.hot_start(jobndx)
 
     sys.exit(run_async( do_hotstart() ))
