@@ -12,6 +12,7 @@ import typer
 
 from .config import load_config
 from .job import Job, runcmd
+from .zipstr import str_to_dir
 from .manager import JobManager
 from .models import (
         JobState,
@@ -111,6 +112,7 @@ def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
 def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handle.")],
               jobndx: Annotated[int, typer.Argument(help="Sequential job index")],
               jobspec: Annotated[str, typer.Argument(help="Jobspec json")],
+              zstr: Annotated[Optional[str], typer.Argument(help="b64-encoded zipfile to unpack into job dir")] = None,
               backend: Annotated[str, typer.Option(help="Local backend used to template run-script")] = "default",
               v: V1 = False, vv : V2 = False,
               cfg : CfgArg = None):
@@ -120,11 +122,14 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
     we are inside a running "job-script".
 
     Hence, if the job dir. doesn't exist, it is created.
-    If it does exist, reached(queued) and reached(active) are called
-    in succession.  This program runs the `scripts/job` script
+    If zstr is provided, it is decoded and unpacked into
+    the job's working directory.
+
+    This program changes to the job's working directory,
+    calls reached(queued), then runs the `scripts/job` script
     synchronously, returning only when it exits.  Note
     that `job` itself runs the reached(active) and
-    reached(complete/failed) calls..
+    reached(complete/failed) calls.
     """
     setup_logging(v, vv)
     config = load_config(cfg)
@@ -154,6 +159,8 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
             job = await job
 
         os.chdir(job.spec.directory)
+        if zstr is not None:
+            str_to_dir(zstr, job.spec.directory)
         return await job.hot_start(jobndx)
 
     sys.exit(run_async( do_hotstart() ))

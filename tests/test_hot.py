@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from psik import __version__
 from psik.psik import app
 from psik.config import load_config
+from psik.zipstr import dir_to_str
 
 from .test_config import write_config
 
@@ -41,4 +42,29 @@ def test_hot_start(tmp_path):
     stat = (base/'status.csv').read_text().split()
     assert len(stat) == 4
     assert 'completed' in stat[-1]
-    
+
+def test_zhot_start(tmp_path):
+    cfg = write_config(tmp_path)
+    setup_dir = tmp_path/"setup"
+    setup_dir.mkdir()
+    (setup_dir/"data.txt").write_text("T = 298\n")
+    zstr = dir_to_str(setup_dir)
+
+    spec = r"""
+    { "name": "foo",
+      "script": "#!/usr/bin/env rc\ncat data.txt\n"
+    }
+    """
+    result = runner.invoke(app, ["hot-start", "--config", cfg, "7001271.8271", "1", spec, zstr])
+    print(result.stdout)
+    assert result.exit_code == 0
+
+    base = tmp_path/'prefix'/'7001271.8271'
+    assert base.is_dir()
+    out = (base/'log'/'stdout.1').read_text()
+    assert "T = 298" in out
+    err = (base/'log'/'stderr.1').read_text()
+    assert err.strip() == ""
+    stat = (base/'status.csv').read_text().split()
+    assert len(stat) == 4
+    assert 'completed' in stat[-1]
