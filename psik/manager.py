@@ -1,4 +1,4 @@
-from typing import Union, Dict, Tuple, List, Any
+from typing import Union, Dict, Tuple, List, Any, Optional
 from collections.abc import AsyncIterator
 import logging
 _logger = logging.getLogger(__name__)
@@ -29,16 +29,16 @@ class JobManager:
         If set, default job attributes are filled in for
         all jobs that do not have those attributes set already.
     """
-    def __init__(self, config : Config):
+    def __init__(self, config: Config) -> None:
         assert Path(config.prefix).is_dir(), "JobManager: prefix is not a dir"
-        templates.check(config.backend.type) # verify all templates are present
+        for btype in set([b.type for b in config.backends.values()]):
+            templates.check(btype) # verify all templates are present
 
         pre = Path(config.prefix).resolve()
         pre.mkdir(exist_ok=True)
         assert os.access(pre, os.W_OK)
 
         self.prefix = aPath(pre)
-        self.backend_t = config.backend.type
         self.config = config
 
     async def _alloc(self, jobspec : JobSpec) -> aPath:
@@ -64,42 +64,43 @@ class JobManager:
 
         return base
 
-    def _insert_defaults(self, attr : BackendConfig) -> None:
-        """ Merge JobManager.config.backend into
-            the BackendConfig structure `attr`.  This way JobSpec-s
-            don't have to keep entering their project-id, etc.
-        """
-        defaults = self.config.backend
-        for key, val in attr.model_dump().items():
-            if val is None:
-                val = getattr(defaults, key)
-                if val is not None:
-                    setattr(attr, key, val)
-            if len(attr.attributes) == 0 and len(defaults.attributes) > 0:
-                attr.attributes.update(defaults.attributes)
-
-    async def create(self, jobspec : JobSpec) -> Job:
+    async def create(self, jobspec: JobSpec,
+                           base: Optional[aPath] = None) -> Job:
         """Create a new job from the given JobSpec
 
            This function renders job templates,
            then calls create_job.
+
+           If base is specified, any path at that directory
+           is overwritten.
         """
-        base = await self._alloc(jobspec) # allocate a base dir for this job
-        self._insert_defaults(jobspec.backend)
+        if base is None: # allocate a base dir for this job
+            base = await self._alloc(jobspec)
+        else:
+            await base.mkdir(exist_ok=True)
+        backend = self.config.backends[jobspec.backend]
+
         data : Dict[str,Any] = {
                 'job': jobspec.model_dump(),
                 'base': str(base),
+                'stamp': base.name,
                 'psik': self.config.psik_path,
                 'rc': self.config.rc_path
                }
         #  Replaces `data[job.backend.attributes]`
-        #  with its key/val pairs specific to the backend_type in use.
+        #  with its key/val pairs specific to the backend in use.
+        data['job']['backend'] = backend.model_dump()
+          # backend's default attributes
+        attr = data['job']['backend']['attributes']
+          # override any specifically set jobspec.attributes
+        attr.update(jobspec.attributes)
+        # re-format so it can be traversed by the view
+        del data['job']['attributes']
         data['job']['backend']['attributes'] = [
-                 {'key': k, 'value': v} for k, v in \
-                     jobspec.backend.attributes.items()
+                 {'key': k, 'value': v} for k, v in attr.items()
              ]
         
-        tpl = templates.render_all(self.backend_t, templates.actions, data)
+        tpl = templates.render_all(backend.type, templates.actions, data)
 
         return await create_job(base, jobspec, self.config.rc_path, **tpl)
 

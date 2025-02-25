@@ -1,0 +1,16 @@
+#!{{rc}}
+{{#job.name}}# {{.}}
+{{/job.name}}
+
+# setup fixed job env variables
+mpirun = `{which mpirun >[2]/dev/null}
+if(! ~ $status 0) {
+  mpirun = ()
+}
+nodes  = 1
+jobndx = $1
+jobid  = $pid
+base   = '{{base}}'
+# nodelist = ...
+
+{{>job_body}}

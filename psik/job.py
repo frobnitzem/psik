@@ -1,5 +1,6 @@
 from typing import Union, Dict, Tuple, List, Optional, Set
 from io import StringIO
+import sys
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -9,9 +10,9 @@ from time import time as timestamp
 
 from anyio import Path as aPath
 
-from .models import JobSpec, JobState, Callback
+from .models import JobSpec, JobState, Callback, Transition
 from .statfile import read_csv, append_csv
-from .exceptions import InvalidJobException, SubmitException
+from .exceptions import InvalidJobException, SubmitException, CallbackException
 from .web import post_json
 
 class Job:
@@ -29,7 +30,7 @@ class Job:
 
         self.valid = False
         self.spec = JobSpec(script="")
-        self.history : List[Tuple[float,int,JobState,int]] = []
+        self.history : List[Transition] = []
 
     # Await this class to read metadata from the filesystem.
     def __await__(self):
@@ -45,8 +46,11 @@ class Job:
         self.history = self.history[:0]
         for step in history: # parse history
             try:
-                self.history.append(( float(step[0]), int(step[1]),
-                                      JobState(step[2]), int(step[3]) ))
+                self.history.append(Transition(time=float(step[0]),
+                                               jobndx=int(step[1]),
+                                               state=JobState(step[2]),
+                                               info=int(step[3])
+                                   ))
             except Exception as e:
                 _logger.error("%s: Invalid row in status.csv: %s",
                               self.stamp, step)
@@ -57,16 +61,21 @@ class Job:
                       info : int = 0) -> bool:
         """ Mark job as having reached the given state.
             info is usually the job_id (when known).
+
+            May throw CallbackException.
         """
         t = timestamp()
-        data  = (t, jobndx, state, info)
-        data1 = (t, jobndx, state.value, info)
+        data  = Transition(time=t, jobndx=jobndx, state=state, info=info)
         self.history.append( data )
-        await append_csv(self.base / 'status.csv', *data1)
+        await append_csv(self.base / 'status.csv', *data.fields())
         if not self.valid:
             base = self.base
             spec = await (base/'spec.json').read_text(encoding='utf-8')
             self.spec = JobSpec.model_validate_json(spec)
+
+        token = None
+        if self.spec.cb_secret:
+            token = self.spec.cb_secret.get_secret_value()
         if self.spec.callback is not None:
             cb = Callback(jobid = self.stamp,
                           jobndx = jobndx,
@@ -75,9 +84,13 @@ class Job:
             token = None
             if self.spec.cb_secret:
                 token = self.spec.cb_secret.get_secret_value()
-            return await post_json(self.spec.callback,
-                                   cb.model_dump_json(),
-                                   token) is not None
+            try:
+                return await post_json(self.spec.callback,
+                                       cb.model_dump_json(),
+                                       token) is not None
+            except Exception as e:
+                msg = f"{self.spec.callback} <- {cb}"
+                raise CallbackException(msg) from e
         return True
 
     def summarize(self) -> Tuple[int, Dict[JobState, Set[int]]]:
@@ -85,16 +98,17 @@ class Job:
             
             returns (next available jobndx, mapping from state to jobndx)
         """
-        jobndx = 1
+        jobndx = 1 # largest jobndx seen plus 1
 
         status : Dict[JobState, Set[int]] = \
                  dict( (s, set()) for s in JobState )
         del status[JobState.new]
-        for t, ndx, state, info in self.history:
+        for t in self.history:
+            ndx = t.jobndx
             if ndx >= jobndx:
                 jobndx = ndx+1
-            if state in status:
-                status[state].add(ndx)
+            if t.state in status:
+                status[t.state].add(ndx)
 
         # TODO: sanity checks to ensure jobs passed through queued
         # before reaching other states, cancelled/failed/completed
@@ -124,8 +138,22 @@ class Job:
             _logger.error('%s: submit script returned unparsable result: %s',
                           self.stamp, out)
             native_job_id = 0
-        await self.reached(jobndx, JobState.queued, native_job_id)
+        try:
+            await self.reached(jobndx, JobState.queued, native_job_id)
+        except CallbackException as e:
+            _logger.error("%s: Error sending callback: %s",
+                              self.stamp, e)
+
         return jobndx, native_job_id
+
+    async def hot_start(self, jobndx: int) -> int:
+        try:
+            await self.reached(jobndx, JobState.queued, jobndx)
+        except CallbackException as e:
+            _logger.error("%s: Error sending callback: %s",
+                              self.stamp, e)
+        ret, out, err = await runcmd(str(self.base / 'scripts' / 'job'), str(jobndx))
+        return ret
 
     async def cancel(self) -> None:
         # Prevent a race condition by recording this first.
@@ -135,9 +163,11 @@ class Job:
         await self.read_info()
 
         native_ids = {}
-        for t, ndx, state, info in self.history:
+        for t in self.history:
+            ndx = t.jobndx
+            state = t.state
             if state == JobState.queued:
-                native_ids[ndx] = info
+                native_ids[ndx] = t.info
             elif state == JobState.completed:
                 del native_ids[ndx]
             elif state == JobState.failed:

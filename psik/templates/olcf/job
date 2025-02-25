@@ -1,0 +1,55 @@
+job:
+{{#job.name}}
+  name: "{{.}}"
+{{/job.name}}
+  current_working_directory: "/tmp" #"{{job.directory}}"
+  environment:
+  - "USING_PSIK=true"
+{{#job.environment}}
+  - "{{name}}={{value}}"
+{{/job.environment}}
+
+{{#job.resources}}
+{{#duration}}
+  time_limit:
+    number: {{.}}
+    set: true
+{{/duration}}
+{{#node_count}}
+  nodes: "{{.}}"
+{{/node_count}}
+{{#process_count}}
+  {{! Not currently accepted by Facility API, so will throw an error. }}
+  ntasks: {{.}}
+{{/process_count}}
+{{#processes_per_node}}
+  tasks_per_node: {{.}}
+{{/processes_per_node}}
+{{#gpu_cores_per_process}}
+  {{! Not currently accepted by Facility API, so will throw an error. }}
+  gpus_per_task: {{.}}
+{{/gpu_cores_per_process}}
+{{!SLURM has different meanings for 'CPU', depending on the exact allocation plugin being
+   used. The default plugin uses the literal meaning for 'CPU' - physical processor. The
+   consumable resource allocation plugin, on the other hand, equates 'CPU' to a thread (if
+   hyperthreaded CPUs are used) or CPU core (for non-hyperthreaded CPUs).}}
+{{#cpu_cores_per_process}}
+  cpus_per_task: "{{.}}"
+{{/cpu_cores_per_process}}
+{{/job.resources}}
+
+{{#job.backend}}
+{{#queue_name}}
+  partition: "{{.}}"
+{{/queue_name}}
+{{#project_name}}
+  account: "{{.}}"
+{{/project_name}}
+{{#reservation_id}}
+  reservation: "{{.}}"
+{{/reservation_id}}
+{{/job.backend}}
+  standard_input: /dev/null
+  standard_output: /dev/null
+  standard_error: /dev/null
+  script: psik hot-start {{stamp}} %(jobndx)d '%(jobspec)s'

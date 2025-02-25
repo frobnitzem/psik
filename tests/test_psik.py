@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import re
 
 import pytest
 from typer.testing import CliRunner
@@ -85,3 +86,41 @@ def test_app(tmp_path):
     (base/jobs[1]).chmod(0o700)
     result = runner.invoke(app, ["rm", "--config", cfg, str(jobs[1])])
     assert result.exit_code == 0
+
+def test_start(tmp_path):
+    cfg = write_config(tmp_path)
+    config = load_config( cfg )
+    base = config.prefix
+
+    spec = Path(tmp_path/'jobspec.json')
+    spec.write_text(r"""
+    { "name": "foo",
+      "script": "#!/usr/bin/env rc\npwd >pwd\nhostname >host\n"
+    }
+    """)
+    cfg = str(cfg)
+    spec = str(spec)
+
+    result = runner.invoke(app, ["run", "--config", cfg, "--no-submit", spec])
+    print(result.stdout)
+    assert result.exit_code == 0
+
+    m = re.match(r"Created ([0-9.]*)", result.stdout)
+    assert m is not None, "Invalid output from psik run"
+    stamp = m[1]
+
+    jobs = list(base.iterdir())
+    assert len(jobs) == 1
+    assert jobs[0].name == stamp
+
+    result = runner.invoke(app, ["start", "-v", "--config", cfg, "123"])
+    assert result.exit_code != 0
+
+    result = runner.invoke(app, ["start", "-v", "--config", cfg, stamp])
+    assert result.exit_code == 0
+    result = runner.invoke(app, ["status", "--config", cfg, stamp])
+    assert result.exit_code == 0
+    print(result.stdout)
+    #assert result.stdout.count('\n') >= 2
+    assert "base:" in result.stdout
+    assert "work:" in result.stdout

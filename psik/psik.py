@@ -11,13 +11,15 @@ _logger = logging.getLogger(__name__)
 import typer
 
 from .config import load_config
-from .job import Job
+from .job import Job, runcmd
+from .zipstr import str_to_dir
 from .manager import JobManager
 from .models import (
         JobState,
         JobSpec,
         load_jobspec
 )
+from .exceptions import CallbackException
 
 def run_async(f):
     loop = asyncio.get_event_loop()
@@ -38,8 +40,8 @@ CfgArg = Annotated[Optional[Path], typer.Option("--config",
                    help="Config file path [default ~/.config/psik.json].")]
 
 @app.command()
-def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
-           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+def status(stamps: List[str] = typer.Argument(..., help="Job's timestamp / handle."),
+           v: V1 = False, vv: V2 = False, cfg: CfgArg = None):
     """
     Read job status information and history.
     """
@@ -47,7 +49,7 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     config = load_config(cfg)
     base = config.prefix
 
-    async def stat():
+    async def stat(stamp):
         job = await Job(base / stamp)
         #print(job.spec.dump_model_json(indent=4))
         print(job.spec.name)
@@ -56,8 +58,13 @@ def status(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
         print()
         print("    time ndx state info")
         for line in job.history:
-            print("    %.3f %3d %10s %8d" % line)
-    run_async(stat())
+            print("    %.3f %3d %10s %8d" % (line.time, line.jobndx, line.state.value, line.info))
+
+    async def loop_stat():
+        for stamp in stamps:
+            await stat(stamp)
+
+    run_async(loop_stat())
 
 @app.command()
 def rm(stamps : List[str] = typer.Argument(...,
@@ -102,6 +109,63 @@ def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     print(f"Started {job.stamp}")
 
 @app.command()
+def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handle.")],
+              jobndx: Annotated[int, typer.Argument(help="Sequential job index")],
+              jobspec: Annotated[str, typer.Argument(help="Jobspec json")],
+              zstr: Annotated[Optional[str], typer.Argument(help="b64-encoded zipfile to unpack into job dir")] = None,
+              backend: Annotated[str, typer.Option(help="Local backend used to template run-script")] = "default",
+              v: V1 = False, vv : V2 = False,
+              cfg : CfgArg = None):
+    """
+    (re)start a job directly into the "active" state.
+    This method assumes resources are already allocated and
+    we are inside a running "job-script".
+
+    Hence, if the job dir. doesn't exist, it is created.
+    If zstr is provided, it is decoded and unpacked into
+    the job's working directory.
+
+    This program changes to the job's working directory,
+    calls reached(queued), then runs the `scripts/job` script
+    synchronously, returning only when it exits.  Note
+    that `job` itself runs the reached(active) and
+    reached(complete/failed) calls.
+    """
+    setup_logging(v, vv)
+    config = load_config(cfg)
+
+    try:
+        spec = JobSpec.model_validate_json(jobspec)
+    except Exception as e:
+        _logger.exception("Error parsing JobSpec from cmd-line argument.")
+        raise typer.Exit(code=1)
+
+    spec.backend = backend
+
+    async def do_hotstart():
+        job = Job(config.prefix / str(stamp))
+        if not await job.base.is_dir() or \
+                not await (job.base/'spec.json').exists():
+            await job.base.mkdir(exist_ok=True)
+            # Ensure working directory exists.
+            if spec.directory is None:
+                workdir = job.base / 'work'
+                await workdir.mkdir()
+                spec.directory = str(workdir)
+            # create if not available
+            mgr = JobManager(config)
+            job = await mgr.create(spec, job.base)
+        else: # load
+            job = await job
+
+        os.chdir(job.spec.directory)
+        if zstr is not None:
+            str_to_dir(zstr, job.spec.directory)
+        return await job.hot_start(jobndx)
+
+    sys.exit(run_async( do_hotstart() ))
+
+@app.command()
 def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
            v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
@@ -126,23 +190,35 @@ def reached(base : str = typer.Argument(..., help="Job's base directory."),
     instead called during a job's (pre-filled) callbacks.
     """
     job = Job(base)
-    ok = run_async( job.reached(jobndx, state, info) )
+    try:
+        ok = run_async( job.reached(jobndx, state, info) )
+    except CallbackException as e:
+        print("Error sending callback: ", str(e), file=sys.stderr)
+        ok = False
     if not ok:
         raise typer.Exit(code=1)
 
 @app.command()
-def ls(v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+def ls(stamps: List[str] = typer.Argument(None),
+       v: V1 = False,
+       vv: V2 = False,
+       cfg: CfgArg = None):
     """
     List jobs.
     """
+    if stamps:
+        return status(stamps, v, vv, cfg)
+
     setup_logging(v, vv)
     config = load_config(cfg)
     mgr = JobManager(config)
     async def show():
+        print(f"{'jobid':<15} {'state':>10} jobndx info name")
         async for job in mgr.ls():
-            t, ndx, state, info = job.history[-1]
-            #print(f"{job.base} {job.spec.name} {t} {ndx} {state} {info}")
-            print(f"{job.base} '{job.spec.name}' {state}/{ndx}")
+            #line.time, line.jobndx, line.state.value, line.info))
+            h = job.history[-1]
+            #print(f"{job.base} {job.spec.name} {h.time} {h.jobndx} {h.state.value} {h.info}")
+            print(f"{job.stamp:<15} {h.state.value:<10} {h.jobndx:>6} {h.info:>4} {job.spec.name}")
     run_async(show())
 
 @app.command()

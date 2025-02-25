@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+#
+# basically:
+#curl -X POST \
+#  -H 'Authorization: '$OLCF_TOKEN \
+#  -H 'Content-Type: application/json' \
+#  -d '@{{base}}/scripts/job' \
+#  https://s3m.apps.olivine.ccs.ornl.gov/slurm/v0.0.41/defiant/job/submit
+#
+# except that job is converted from yaml to json
+# and job['job']['script'] is %-formatted to add jobndx
+# and `psik hot-start` to the script.
+#
+import sys
+import os
+import asyncio
+import json
+
+import yaml
+import aiohttp
+
+async def post_job(job, token) -> int:
+    base_url = "https://s3m.apps.olivine.ccs.ornl.gov"
+    base_path = "/slurm/v0.0.42/"
+    headers = { "Authorization": token,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+              }
+    async with aiohttp.ClientSession(base_url=base_url, headers=headers) as session:
+        async with session.post(base_path+"defiant/job/submit",
+                                json=job) as resp:
+            if resp.status//100 != 2:
+                print(await resp.text(), file=sys.stderr)
+                return 1
+            ret = await resp.json()
+
+    warn = ret.get("warnings", [])
+    errs = ret.get("errors", [])
+    if len(warn) > 0:
+        print("SLURM returned warnings:", file=sys.stderr)
+        print("- " + "\n- ".join(warn), file=sys.stderr)
+    if len(errs) > 0:
+        print("SLURM returned errors:", file=sys.stderr)
+        print("- " + "\n- ".join(errs), file=sys.stderr)
+
+    job_id = ret.get("job_id", None)
+    if isinstance(job_id, str):
+        job_id = int(job_id)
+    if not isinstance(job_id, int) or job_id < 0:
+        print("Invalid return from API call: no job_id",file=sys.stderr)
+        print(ret, file=sys.stderr)
+        return 2
+    print(ret["job_id"])
+    return 0
+
+if __name__=="__main__":
+    argv = sys.argv
+
+    with open("{{base}}/spec.json", "r", encoding="utf-8") as f:
+        jobspec = json.dumps(json.load(f),separators=(',', ':'))
+
+    jobndx = int(argv[1])
+    with open("{{base}}/scripts/job", "r", encoding="utf-8") as f:
+        job = yaml.safe_load(f)
+        # TODO: copy files from job['directory'] to remote!
+        job['directory'] = None # unset this
+        # ensure nodes is set
+        job['job']['nodes'] = job['job'].get("nodes", "1")
+        job['job']['script'] = job['job']['script'] % {
+                'jobspec': jobspec.replace("'", "''"),
+                'jobndx': jobndx }
+
+    token = os.getenv("OLCF_TOKEN")
+    if token is None:
+        raise ValueError("OLCF_TOKEN env var must be defined")
+    print("submitting job:", file=sys.stderr)
+    print(json.dumps(job, indent=2), file=sys.stderr)
+
+    ans = asyncio.run(post_job(job, token))
+    sys.exit(ans)
