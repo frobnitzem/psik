@@ -72,6 +72,10 @@ class Job:
             base = self.base
             spec = await (base/'spec.json').read_text(encoding='utf-8')
             self.spec = JobSpec.model_validate_json(spec)
+
+        token = None
+        if self.spec.cb_secret:
+            token = self.spec.cb_secret.get_secret_value()
         if self.spec.callback is not None:
             cb = Callback(jobid = self.stamp,
                           jobndx = jobndx,
@@ -137,8 +141,19 @@ class Job:
         try:
             await self.reached(jobndx, JobState.queued, native_job_id)
         except CallbackException as e:
-            print("Error sending callback: ", str(e), file=sys.stderr)
+            _logger.error("%s: Error sending callback: %s",
+                              self.stamp, e)
+
         return jobndx, native_job_id
+
+    async def hot_start(self, jobndx: int) -> int:
+        try:
+            await self.reached(jobndx, JobState.queued, jobndx)
+        except CallbackException as e:
+            _logger.error("%s: Error sending callback: %s",
+                              self.stamp, e)
+        ret, out, err = await runcmd(str(self.base / 'scripts' / 'job'), str(jobndx))
+        return ret
 
     async def cancel(self) -> None:
         # Prevent a race condition by recording this first.

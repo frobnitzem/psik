@@ -22,7 +22,7 @@ class Config(BaseModel):
     rc_path      : str = Field(default = _rc_path, title="path to rc executable")
 
 def load_config(path1 : Union[str, Path, None]) -> Config:
-    cfg_name = 'psik.json'
+    cfg_name = "psik.json"
     if path1 is not None:
         path = Path(path1)
     else:

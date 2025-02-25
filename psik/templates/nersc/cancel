@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+#
+# basically:
+#
+#     curl -X DELETE \
+#       -H 'Authorization: Bearer '$NERSC_TOKEN \
+#       https://api.nersc.gov/api/v1.2/compute/jobs/perlmutter/{jobid}
+#
+# except that the NERSC token is gathered from oidc.nersc.gov/c2id/token
+
+from typing import Optional
+import sys
+import os
+import asyncio
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import aiohttp
+
+from authlib.integrations.requests_client import OAuth2Session
+from authlib.oauth2.rfc7523 import PrivateKeyJWT
+from authlib.integrations.base_client.errors import OAuthError
+
+def get_token(nersc_name: Optional[str] = None) -> str:
+    """ Parse ~/.superfacility/key.pem and grab a token.
+
+    Raises KeyError if no file found, or OAuthError if
+    a token is not granted.
+    """
+    nersc_dir = Path(os.environ.get("HOME", "/")) / ".superfacility"
+    if nersc_name is None:
+        if (nersc_dir/"key.pem").is_file():
+            nersc_name = "key.pem"
+    if nersc_name is None:
+        for f in nersc_dir.iterdir():
+            if f.is_file() and f.name[-4:] in [".key", ".pem"]:
+                nersc_name = f.name
+                break
+    if nersc_name is None:
+        raise KeyError(f"No <name>.pem file in {nersc_dir}")
+
+    nersc_info = nersc_dir/nersc_name
+    nersc = Path(nersc_info)
+    with open(nersc_info, "r", encoding="ascii") as f:
+        client_id = f.readline().strip()
+        private_key = f.read()
+    token_url = "https://oidc.nersc.gov/c2id/token"
+
+    session = OAuth2Session(
+            client_id,
+            private_key,
+            PrivateKeyJWT(token_url),
+            grant_type="client_credentials",
+            token_endpoint=token_url
+        )
+
+    try:
+        token = session.fetch_token()
+    except OAuthError:
+        print("Auth. error.")
+        raise
+    #print(f"fetched token with scope: {token['scope']}")
+    return token['access_token']
+
+def nersc_path(path: str) -> str:
+    return "/api/v1.2/" + path
+
+@asynccontextmanager
+async def nersc_client(token: str):
+    base_url = "https://api.nersc.gov"
+    headers = { "Authorization": 'Bearer '+token,
+                "Content-Type": "application/x-www-form-urlencoded",
+                "accept": "application/json"
+              }
+    
+    async with aiohttp.ClientSession(base_url=base_url,
+                                     headers=headers) as session:
+        yield session
+
+async def delete_path(session, path: str, params={}):
+    async with session.delete(nersc_path(path), params=params) as resp:
+        if resp.status//100 != 2:
+            err = await resp.text()
+            raise ValueError(f"Server returned error {resp.status}: {err}")
+        return await resp.json()
+
+async def main(argv):
+    machine = "perlmutter"
+    jobid = int(argv[1])
+    token = get_token()
+    # Note: beware the dreaded {"detail":"Not authenticated"}
+    async with nersc_client(token) as session:
+        ans = await delete_path(session, f"/compute/jobs/{machine}/{jobid}")
+    print(ans)
+
+if __name__=="__main__":
+    asyncio.run(main(sys.argv))

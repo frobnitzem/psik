@@ -1,0 +1,4 @@
+#!/usr/bin/env rc
+
+curl -X DELETE -H 'Authorization: '$OLCF_TOKEN \
+    https://s3m.apps.olivine.ccs.ornl.gov/slurm/v0.0.42/defiant/job/$1
