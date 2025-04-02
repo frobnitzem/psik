@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+# Note: psik does not use polling, so this file is for reference.
+# Results (when completed) are present in the remote system's
+# psik working directory. These may have been communicated
+# back to a psik-listener if callbacks were defined.
+
+import os, sys, uuid
+from globus_compute_sdk import Client, Executor
+
+if __name__=="__main__":
+    argv = sys.argv
+
+    if os.getenv("GLOBUS_COMPUTE_CLIENT_ID") is None:
+        raise ValueError("GLOBUS_COMPUTE_CLIENT_ID env var must be defined")
+    if os.getenv("GLOBUS_COMPUTE_CLIENT_SECRET") is None:
+        raise ValueError("GLOBUS_COMPUTE_CLIENT_SECRET env var must be defined")
+
+    gclient = Client()
+    jobid = int(argv[1])
+    task_group_id = uuid.UUID(int=jobid)
+    with Executor( endpoint_id = "{{job.backend.queue_name}}"
+                 , client = gclient
+                 , task_group_id = task_group_id
+                 ) as gce:
+        future = gce.reload_tasks()[0]
+
+    if not f.done():
+        print("Not complete")
+        sys.stderr.flush()
+        sys.stdout.flush()
+        os._exit(1)
+
+    ans = f.result()
+    print(f"Command '{ans.cmd}' returned '{ans.returncode}'")
+    print(ans.stdout)
+    print(ans.stderr)
+    sys.exit(0)

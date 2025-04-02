@@ -129,7 +129,6 @@ class Job:
         jobndx, _ = self.summarize()
 
         ret, out, err = await runcmd(str(self.base / 'scripts' / 'submit'), str(jobndx))
-        # TODO: store this activity in the job's interaction log too.
         if ret != 0:
             raise SubmitException(err)
         try:
@@ -197,9 +196,9 @@ async def runcmd(prog : Union[Path,str], *args : str,
     out = stdout.decode('utf-8')
     err = stderr.decode('utf-8')
     if len(stdout) > 0:
-        _logger.debug('%s stdout: %s', prog, out)
+        _logger.info('%s stdout: %s', prog, out)
     if len(stderr) > 0:
-        _logger.info('%s stderr: %s', prog, err)
+        _logger.warning('%s stderr: %s', prog, err)
 
     ret = -1
     if proc.returncode is not None:

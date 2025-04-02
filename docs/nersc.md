@@ -8,7 +8,7 @@ Configure a NERSC backend like so,
       "type": "nersc",
       "queue_name": "batch",
       "project_name": "m3792",
-      "reservation_id": null,
+      "reservation_id": null
     }
   }
 }
@@ -20,7 +20,7 @@ followed by a PEM-formatted private key.
 
 Example:
 
-    randmstrgz
+    myidstr
     -----BEGIN RSA PRIVATE KEY-----
     ...
     -----END RSA PRIVATE KEY-----

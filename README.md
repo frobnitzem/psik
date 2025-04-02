@@ -14,7 +14,7 @@ $\Psi_k$ is a simple python package put together with
 [python-poetry](https://python-poetry.org/),
 so it's easy to install:
 
-    pip install git+https://github.com/frobnitzem/psik.git@main
+    pip install 'git+https://github.com/frobnitzem/psik.git@main[facilities]'
 
 If you're building a package with poetry, use poetry
 add instead of pip install.
@@ -135,6 +135,7 @@ prefix/
               may be a symbolic link to a node-local filesystem
               (e.g. when JobSpec.directory was set manually)
       log/  - directory holding logs in the naming scheme,
+           console        - log messages from psik itself
            stdout.$jobndx - stdout and stderr logs from `run` portion of job.rc
            stderr.$jobndx - Note that jobndx is sequential from 1.
 ```
