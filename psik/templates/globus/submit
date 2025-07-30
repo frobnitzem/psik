@@ -1,30 +1,40 @@
 #!/usr/bin/env python3
 
-from globus_compute_sdk import Executor, Client
+import os, sys, time, json
+from globus_compute_sdk import Client, Executor, ShellFunction
 
-def runcmd(cmd):
-    import os
-    return os.popen(cmd).read()
+from psik.zipstr import dir_to_str
 
-batch_endpoint_id = 'aaa-bbb-ccc-ddd'
+if __name__=="__main__":
+    argv = sys.argv
 
-sbatch = """#SBATCH -J globus_job
-#SBATCH -t 10
-#SBATCH -o %x-%j.out
-#SBATCH -N 2
-"""
+    with open("{{base}}/spec.json", "r", encoding="utf-8") as f:
+        jobspec = json.dumps(json.load(f),separators=(',', ':'))
+    with open("{{base}}/scripts/job", "r", encoding="utf-8") as f:
+        script = f.read()
+    jobndx = int(argv[1])
 
-scheduler_options = { "ACCOUNT": "csc266",
-                      "OPTIONS": sbatch,
-                      "COMMAND": "export PATH=\"$PATH:/usr/sbin\""
-                    }
+    if os.getenv("GLOBUS_COMPUTE_CLIENT_ID") is None:
+        raise ValueError("GLOBUS_COMPUTE_CLIENT_ID env var must be defined")
+    if os.getenv("GLOBUS_COMPUTE_CLIENT_SECRET") is None:
+        raise ValueError("GLOBUS_COMPUTE_CLIENT_SECRET env var must be defined")
 
-client = Client()
-client.get_endpoint_status(batch_endpoint_id)
-func_id = client.register_function(runcmd)
-task_id = client.run("srun hostname", endpoint_id=batch_endpoint_id, function_id=func_id)
-
-#with Executor(endpoint_id = batch_endpoint_id,
-#              user_endpoint_config = scheduler_options) as gce:
-#    future = gce.submit(runcmd, 'srun -N $SLURM_JOB_NUM_NODES printenv')
-#    print( future.result() )
+    # zip up the contents of the working dir.
+    zstr = dir_to_str("{{job.directory}}")
+    gclient = Client()
+    with Executor( endpoint_id = "{{job.backend.queue_name}}"
+                 , client = gclient
+                 ) as gce:
+            bf = ShellFunction(script % {
+                    'jobndx': jobndx,
+                    'jobspec': jobspec.replace("'", "''"),
+                    'zstr': zstr
+                    })
+            print("Submitting job {{stamp}} idx %d"%jobndx, file=sys.stderr)
+            future = gce.submit(bf)
+            while future.task_id is None:
+                time.sleep(1)
+            print(gce.task_group_id.int)
+            sys.stderr.flush()
+            sys.stdout.flush()
+            os._exit(0)

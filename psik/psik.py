@@ -20,16 +20,14 @@ from .models import (
         load_jobspec
 )
 from .exceptions import CallbackException
+from .logs import setup_log, setup_logfile
 
 def run_async(f):
     loop = asyncio.get_event_loop()
     return loop.run_until_complete(f)
 
 def setup_logging(v, vv):
-    if vv:
-        logging.basicConfig(level=logging.DEBUG)
-    elif v:
-        logging.basicConfig(level=logging.INFO)
+    setup_log(True, v, vv)
 
 app = typer.Typer()
 
@@ -105,6 +103,7 @@ def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     base = config.prefix
 
     job = Job(base / str(stamp))
+    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
     run_async( job.submit() )
     print(f"Started {job.stamp}")
 
@@ -158,6 +157,7 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
         else: # load
             job = await job
 
+        setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
         os.chdir(job.spec.directory)
         if zstr is not None:
             str_to_dir(zstr, job.spec.directory)
@@ -176,6 +176,7 @@ def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     base = config.prefix
 
     job = Job(base / str(stamp))
+    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
     run_async( job.cancel() )
     print(f"Canceled {job.stamp}")
 
@@ -190,6 +191,7 @@ def reached(base : str = typer.Argument(..., help="Job's base directory."),
     instead called during a job's (pre-filled) callbacks.
     """
     job = Job(base)
+    setup_logfile(str(job.base/'log'/'console'))
     try:
         ok = run_async( job.reached(jobndx, state, info) )
     except CallbackException as e:
@@ -243,6 +245,7 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
 
     async def create_submit(spec, submit):
         job = await mgr.create(spec)
+        setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
         if submit:
             await job.submit()
         return job
