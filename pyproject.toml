@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "psik"
-version = "2.1.0"
+version = "2.2.0"
 description = "Portable Submission Interface for Jobs"
 authors = ["David M. Rogers <predictivestatmech@gmail.com>"]
 repository = "https://github.com/frobnitzem/psik"
@@ -21,7 +21,7 @@ aiohttp = ">=3.8.0"
 pyyaml = { version="*", optional = true }
 authlib = { version="*", optional = true }
 globus-compute-sdk = { version="*", optional = true }
-#sfapi_client = { version="*", optional = true }
+sfapi_client = { version="*", optional = true }
 
 [tool.poetry.extras]
 yaml = ["pyyaml"]
@@ -34,7 +34,7 @@ pytest = ">=6.1.0"
 mypy = "^1.5.1"
 pytest-asyncio = ">=0.20.3"
 pytest-cov = ">=4.1.0"
-pytest-aiohttp = ">=1.0.5"
+pytest-aiohttp = ">=1.1.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

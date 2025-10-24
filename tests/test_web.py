@@ -1,4 +1,7 @@
+import asyncio
+
 import pytest
+import pytest_asyncio
 
 from aiohttp import web
 from aiohttp.web import HTTPClientError, HTTPForbidden
@@ -22,12 +25,11 @@ async def post_cb(request):
     return web.Response(text='OK', status=200)
     #return web.Response(body=b'"OK"', content_type="application/json", status=200)
 
-@pytest.fixture
-def cb_server(event_loop, aiohttp_server):
+@pytest_asyncio.fixture
+async def cb_client(aiohttp_client):
     app = web.Application()
     app.router.add_post('/callback', post_cb)
-    return event_loop.run_until_complete(aiohttp_server(app))
-### end fixture ###
+    return await aiohttp_client(app)
 
 def test_sign():
     ans = sign_message("Hello, World!", "It's a Secret to Everybody")
@@ -44,7 +46,8 @@ def test_verify():
         verify_signature("X", "Y", None)
 
 @pytest.mark.asyncio
-async def test_local_cb(cb_server, aiohttp_server):
+async def test_local_cb(cb_client):
+    cb_server = cb_client.server
     ans = await post_json(str(cb_server.make_url("/callback")),
                 '{"name": "hello", "script": "echo hello; pwd"}',
 

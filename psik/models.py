@@ -82,7 +82,7 @@ class Callback(BaseModel):
     info    : int = Field(default=0, title="Status code.")
 
 def load_jobspec(fname):
-    data = Path(fname).read_text(encoding='utf-8')
+    data = Path(fname).read_text(encoding="utf-8")
     if fname.endswith("yaml") or fname.endswith("yml"):
         import yaml # type: ignore[import-untyped]
         return JobSpec.model_validate( yaml.safe_load(data) )
