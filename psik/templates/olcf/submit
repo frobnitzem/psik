@@ -19,6 +19,8 @@ import json
 import yaml
 import aiohttp
 
+from psik.zipstr import dir_to_str
+
 async def post_job(job, token) -> int:
     base_url = "https://s3m.apps.olivine.ccs.ornl.gov"
     base_path = "/slurm/v0.0.42/"
@@ -59,16 +61,18 @@ if __name__=="__main__":
     with open("{{base}}/spec.json", "r", encoding="utf-8") as f:
         jobspec = json.dumps(json.load(f),separators=(',', ':'))
 
+    # zip up the contents of the working dir.
+    zstr = dir_to_str("{{job.directory}}")
     jobndx = int(argv[1])
     with open("{{base}}/scripts/job", "r", encoding="utf-8") as f:
         job = yaml.safe_load(f)
-        # TODO: copy files from job['directory'] to remote!
         job['directory'] = None # unset this
         # ensure nodes is set
         job['job']['nodes'] = job['job'].get("nodes", "1")
         job['job']['script'] = job['job']['script'] % {
                 'jobspec': jobspec.replace("'", "''"),
-                'jobndx': jobndx }
+                'jobndx': jobndx,
+                'zstr': zstr }
 
     token = os.getenv("OLCF_TOKEN")
     if token is None:

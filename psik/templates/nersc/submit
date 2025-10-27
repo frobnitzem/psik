@@ -28,6 +28,8 @@ from authlib.integrations.requests_client import OAuth2Session
 from authlib.oauth2.rfc7523 import PrivateKeyJWT
 from authlib.integrations.base_client.errors import OAuthError
 
+from psik.zipstr import dir_to_str
+
 def get_token(nersc_name: Optional[str] = None) -> str:
     """ Parse ~/.superfacility/key.pem and grab a token.
 
@@ -143,11 +145,14 @@ async def main(argv):
     with open("{{base}}/spec.json", "r", encoding="utf-8") as f:
         jobspec = json.dumps(json.load(f),separators=(',', ':'))
 
+    # zip up the contents of the working dir.
+    zstr = dir_to_str("{{job.directory}}")
     jobndx = int(argv[1])
     with open("{{base}}/scripts/job", "r", encoding="utf-8") as f:
         script = f.read() % {
                 'jobspec': jobspec.replace("'", "''"),
-                'jobndx': jobndx }
+                'jobndx': jobndx,
+                'zstr': zstr }
 
     token = get_token()
     # Note: beware the dreaded {"detail":"Not authenticated"}

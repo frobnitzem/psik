@@ -53,4 +53,4 @@ jobid  = $SLURM_JOB_ID
 #
 
 # would go to job_body here, but it's remote...
-psik hot-start {{stamp}} %(jobndx)d '%(jobspec)s'
+psik hot-start {{stamp}} %(jobndx)d '%(jobspec)s' '%(zstr)s'

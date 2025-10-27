@@ -52,4 +52,4 @@ job:
   standard_input: /dev/null
   standard_output: /dev/null
   standard_error: /dev/null
-  script: psik hot-start {{stamp}} %(jobndx)d '%(jobspec)s'
+  script: psik hot-start {{stamp}} %(jobndx)d '%(jobspec)s' '%(zstr)s'
