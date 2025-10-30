@@ -1,6 +1,14 @@
-# Valid backends must contain mustache formatted template files
-# for the following:
+# Valid backends must contain all the following function
+# prototypes:
+# 
+# async def submit(job: Job, jobndx: int) -> Optional[str]
+# async def cancel(jobinfos: List[str]) -> None
+# async def poll(jobids: List[str]) -> List[JobState]
 
-actions = ['submit', 'cancel', 'job']
-
-from .renderer import check, list_backends, render, render_all
+from .renderer import (
+    check,
+    list_backends,
+    submit_at,
+    cancel_at,
+    poll_at
+)

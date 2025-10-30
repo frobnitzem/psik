@@ -112,7 +112,6 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
               jobndx: Annotated[int, typer.Argument(help="Sequential job index")],
               jobspec: Annotated[str, typer.Argument(help="Jobspec json")],
               zstr: Annotated[Optional[str], typer.Argument(help="b64-encoded zipfile to unpack into job dir")] = None,
-              backend: Annotated[str, typer.Option(help="Local backend used to template run-script")] = "default",
               v: V1 = False, vv : V2 = False,
               cfg : CfgArg = None):
     """
@@ -139,13 +138,11 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
         _logger.exception("Error parsing JobSpec from cmd-line argument.")
         raise typer.Exit(code=1)
 
-    spec.backend = backend
-
-    async def do_hotstart():
+    async def do_hotstart() -> int:
         job = Job(config.prefix / str(stamp))
         if not await job.base.is_dir() or \
                 not await (job.base/'spec.json').exists():
-            await job.base.mkdir(exist_ok=True)
+            await job.base.mkdir(exist_ok=True, parents=True)
             # Ensure working directory exists.
             if spec.directory is None:
                 workdir = job.base / 'work'
@@ -157,13 +154,32 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
         else: # load
             job = await job
 
+        assert job.spec.directory is not None
         setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
         os.chdir(job.spec.directory)
         if zstr is not None:
             str_to_dir(zstr, job.spec.directory)
-        return await job.hot_start(jobndx)
+        return await job.execute(jobndx)
 
     sys.exit(run_async( do_hotstart() ))
+
+@app.command()
+def poll(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+    """
+    Poll a job's state, retrieving any updates.
+
+    Hint: This action can be triggered by receiving
+          a callback (notification of a state change)
+          from the job itself.
+    """
+    setup_logging(v, vv)
+    config = load_config(cfg)
+    base = config.prefix
+
+    job = Job(base / str(stamp))
+    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
+    run_async( job.poll() )
 
 @app.command()
 def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
@@ -184,7 +200,7 @@ def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
 def reached(base : str = typer.Argument(..., help="Job's base directory."),
             jobndx : int = typer.Argument(..., help="Sequential job index."),
             state : JobState = typer.Argument(..., help="State reached by job."),
-            info  : int = typer.Argument(default=0, help="Status code.")):
+            info  : str = typer.Argument(default="", help="Status info.")):
     """
     Record that a job has entered the given state.
     This script is typically not called by a user, but

@@ -1,4 +1,0 @@
-#!/usr/bin/env rc
-cd '{{job.directory}}' || exit 1
-{bsub '{{base}}/scripts/job' $* || exit 1} \
-  | sed -n 's/.*<\([0-9]*\)>.*/\1/p'

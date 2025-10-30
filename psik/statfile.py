@@ -107,7 +107,7 @@ async def append_csv(f : Union[str,Path,aPath,AsyncFile], *vals) -> None:
             async with WriteLock(f2):
                 await f2.write(','.join(map(str, vals)) + '\n')
 
-async def read_csv(f : Union[str,Path,aPath,AsyncFile]) -> List[str]:
+async def read_csv(f : Union[str,Path,aPath,AsyncFile], maxcol=4) -> List[str]:
     if isinstance(f, AsyncFile):
         async with ReadLock(f):
             lines = await f.readlines()
@@ -115,7 +115,7 @@ async def read_csv(f : Union[str,Path,aPath,AsyncFile]) -> List[str]:
         async with await open_file(f, 'r', encoding='utf-8') as f2:
             async with ReadLock(f2):
                 lines = await f2.readlines()
-    return [ l.strip().split(',') for l in lines ]
+    return [ l.strip().split(',', maxcol-1) for l in lines ]
 
 async def create_file(name : aPath, content : str,
                       perm : Optional[int] = None) -> None:

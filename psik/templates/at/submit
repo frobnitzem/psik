@@ -1,6 +1,0 @@
-#!/usr/bin/env rc
-# Schedule job locally when system load is low.
-# https://man7.org/linux/man-pages/man1/batch.1p.html
-cd '{{job.directory}}' || exit 1
-{echo '{{base}}/scripts/job '$* | SHELL=`{which rc} batch >[2=1] || exit 1} \
-    | sed -ne 's/.*[Jj][Oo][Bb] \([^ ]*\) [Aa][Tt].*/\1/p'

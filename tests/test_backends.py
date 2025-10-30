@@ -11,7 +11,7 @@ from .test_web import cb_server, cb_value
 
 def test_backends():
     backends = list_backends()
-    assert len(backends) >= 4
+    assert len(backends) >= 1
 
 #@pytest.mark.skipif(sys.platform == 'darwin', reason="OSX eschews batch/at")
 @pytest.mark.skip

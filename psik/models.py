@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, Tuple
 from enum import Enum
 from pathlib import Path
 
-from pydantic import BaseModel, Field, SecretStr, ConfigDict
+from pydantic import BaseModel, Field, SecretStr, ConfigDict, field_serializer
 from pydantic.types import StringConstraints
 
 JobID = Annotated[str, StringConstraints(pattern=r'^[0-9]+(\.[0-9]+)?$')]
@@ -59,8 +59,14 @@ class JobSpec(BaseModel):
     attributes  : Dict[str,str] = Field(default={}, title="Backend attribute values.")
     # deps       : List[str]     = Field(default=[], title="Dependencies required before starting this job.")
     callback    : Optional[str] = Field(default=None, title="URL to send event notifications.")
+    cb_headers  : Dict[str,str] = Field(default={}, title="Headers to include in callback.")
     cb_secret   : Optional[SecretStr] = Field(default=None, title="hmac256 secret to sign updates sent to 'callback'")
-    client_secret : Optional[SecretStr] = Field(default=None, title="hmac256 secret to validate callback updates from clients")
+
+    @field_serializer('cb_secret', when_used='json')
+    def dump_secret(self, v):
+        if v is None:
+            return None
+        return v.get_secret_value()
 
 #j = JobSpec(script="mpirun hostname")
 #print(j.json())
@@ -69,9 +75,9 @@ class Transition(BaseModel):
     time:   float
     jobndx: int
     state:  JobState
-    info:   int
+    info:   str
 
-    def fields(self) -> Tuple[float,int,str,int]:
+    def fields(self) -> Tuple[float,int,str,str]:
         return self.time, self.jobndx, self.state.value, self.info
 
 # Data models specific to status routes:
@@ -79,7 +85,7 @@ class Callback(BaseModel):
     jobid   : JobID = Field(..., title="Job ID")
     jobndx  : int   = Field(..., title="Sequential job index.")
     state   : JobState = Field(..., title="State reached by job.")
-    info    : int = Field(default=0, title="Status code.")
+    info    : str = Field(default="", title="ID/Status code.")
 
 def load_jobspec(fname):
     data = Path(fname).read_text(encoding='utf-8')
