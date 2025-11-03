@@ -2614,4 +2614,4 @@ facilities = ["globus-compute-sdk", "sfapi_client"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "461c06ba11ec9f36ac609bd775970f0c952260af91a398f0a23fd3318081290e"
+content-hash = "08f5505d74d53047175a5454c5169c218f3ed4076328882c5f742a5f3e68dade"

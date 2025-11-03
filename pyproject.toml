@@ -29,7 +29,7 @@ facilities = ["globus-compute-sdk",
 [tool.poetry.group.dev.dependencies]
 pytest = ">=6.1.0"
 mypy = "^1.5.1"
-pytest-asyncio = ">=0.21.1"
+pytest-asyncio = ">=1.2.0"
 pytest-cov = ">=4.1.0"
 pytest-aiohttp = ">=1.0.5"
 
