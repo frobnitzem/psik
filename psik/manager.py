@@ -14,7 +14,7 @@ from .models import JobSpec, BackendConfig, JobState
 from .statfile import append_csv, create_file
 from .job import Job
 from .config import Config
-import psik.templates as templates
+import psik.backend as backend
 
 class JobManager:
     """ The JobManager class manages all job (directories) listed
@@ -32,7 +32,7 @@ class JobManager:
     def __init__(self, config: Config) -> None:
         assert Path(config.prefix).is_dir(), "JobManager: prefix is not a dir"
         for btype in set([b.type for b in config.backends.values()]):
-            templates.check(btype) # verify all templates are present
+            backend.check(btype) # verify all backends are present
 
         pre = Path(config.prefix).resolve()
         pre.mkdir(exist_ok=True)

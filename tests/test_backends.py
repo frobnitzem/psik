@@ -5,7 +5,7 @@ from typing import Any
 from psik.manager import JobManager
 from psik.models import JobSpec, JobState, BackendConfig, Callback, Transition
 from psik.config import Config
-from psik.templates import list_backends
+from psik.backend import list_backends
 
 from .test_web import cb_server, cb_value
 
@@ -92,7 +92,10 @@ async def test_local_cb(cb_server, aiohttp_server, tmp_path):
     assert cb.jobid == job.stamp
     assert cb.jobndx == jobndx
     assert cb.state in [JobState.queued, JobState.active]
-    assert cb.info == pid
+    if cb.state == JobState.queued:
+        assert cb.info == pid
+    else:
+        assert cb.info == ''
 
     await job.cancel()
     assert len(job.history) > 2 # new, queued, canceled

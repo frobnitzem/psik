@@ -1,4 +1,5 @@
-""" Functionality for rendering templates in this directory.
+""" Functionality for calling modules implemented
+    in the backends/ directory.
 """
 
 from typing import (
@@ -18,7 +19,8 @@ from functools import cache
 import logging
 _logger = logging.getLogger(__name__)
 
-from ..models import JobState
+from .models import JobState
+import psik.backends
 
 def compare_types(actual: Any, expected: Any) -> bool:
     """
@@ -87,7 +89,7 @@ def _lookup(backend, name):
     """ Lookup a function from a backend.
     """
     mod = importlib.import_module(
-                f".templates.{backend}", package="psik")
+                f".backends.{backend}", package="psik")
     return getattr(mod, name)
 
 async def submit_at(backend: str, job, jobndx: int) -> Optional[str]: # type: ignore[name-defined]
@@ -122,9 +124,7 @@ def check(backend):
 def list_backends() -> List[str]:
     backends = []
     import psik
-    for importer, modname, ispkg in pkgutil.iter_modules(psik.templates.__path__):
-        if modname in ["__init__", "renderer"]:
-            continue
+    for importer, modname, ispkg in pkgutil.iter_modules(psik.backends.__path__):
         check(modname)
         backends.append(modname)
     return backends

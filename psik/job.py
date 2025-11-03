@@ -16,7 +16,7 @@ from .statfile import read_csv, append_csv, WriteLock, open_file
 from .exceptions import InvalidJobException, SubmitException, CallbackException
 from .web import post_json
 from .console import run_shebang, runcmd
-from .templates import submit_at, cancel_at, poll_at
+from .backend import submit_at, cancel_at, poll_at
 
 class Job:
     backend: BackendConfig

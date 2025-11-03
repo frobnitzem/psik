@@ -11,24 +11,13 @@ execution and queue polling.
 ## Installation and Getting Started
 
 $\Psi_k$ is a simple python package put together with
-[python-poetry](https://python-poetry.org/),
+[uv](https://docs.astral.sh/uv/)
 so it's easy to install:
 
     pip install 'git+https://github.com/frobnitzem/psik.git@main[facilities]'
 
-If you're building a package with poetry, use poetry
-add instead of pip install.
-
-Running scripts, however, also requires
-access to the `rc` shell -- a simple, lightweight sh-like
-shell that does lists right and fixes bash's known problems
-with quoting.
-
-You can download, compile, install and use the rc shell using
-[getrc.sh](https://github.com/frobnitzem/rcrc/blob/main/getrc.sh).
-To put rc into your python virtual environment, call it like,
-
-    getrc.sh $VIRTUAL_ENV
+If you're building a package with uv, use uv add
+instead of pip install.
 
 
 ### Configuration
@@ -60,11 +49,12 @@ An example configuration file is below:
 The "local" backend type just runs processes in the background
 and is used for testing.
 The "at" backend is more suitable for running locally,
-and uses POSIX batch command.  However, it's broken on OSX.
-Adding more backends is easy.
-For HPC systems, "slurm" and "lsf" backends are implemented.
-In the future, facility-provided API-s should be added
-as backends.
+and uses POSIX batch command.  However, it does not work on
+systems that lack `at` (OSX, Ububtu Desktop, etc.).
+The process of adding a new backends requires adding one file.
+It is described later in this README.
+For HPC systems, "slurm" is implemented.
+Facility-provided API-s are also present.
 
 
 ## Writing a jobspec.json file
@@ -84,19 +74,9 @@ Other properties (like a `ResourceSpec`) are listed in the
 When writing scripts, it's helpful to know that
 the following shell variables are defined during job execution:
 
-- mpirun -- An '\x01'-separated invocation to `JobSpec.launcher`.
-            Executing `$mpirun <programname>` (from an rc shell) or
-            `popen2(os.environ['mpirun'].split('\x01') + ['programname'])`
-            from python will launch the program across all resources
-            allocated to the job using the launcher specified.
-- nodes  -- number of nodes allocated to the job
 - base   -- base directory for psik's tracking of this job
 - jobndx -- job step serial number (1-based) provided at launch time
 - jobid  -- backend-specific job id for this job (if available)
-- psik   -- the path to the psik program (or a literal "psik" if unknown)
-- rc     -- the path to an rc shell (or /usr/bin/env rc if unknown)
-
-See [psik/templates/partials/job\_body] for all the details.
 
 ## How it works
 
@@ -113,30 +93,12 @@ prefix/
           JobState is one of the values in :class:`JobState`
           info is an integer correponding to a scheduler's jobid (for queued)
           or a return status code (other states)
-      scripts/ - directory containing
-        submit       - Submit job.rc to the backend.
-                       Submit is provided with the jobndx serial number as its
-                       only argument.
-
-        cancel       - Ask the backend to cancel all job indexes.
-                       Has no effect if job has already completed / failed.
-
-                       Cancel is provided with a list of native job-ids
-                       as arguments.
-
-        job          - (job.rc) script run during the job.
-                       Its working directory is usually ../work, but templated
-                       as {{job.directory}}.  job.rc is invoked by submit and
-                       provided with the jobndx serial number as
-                       its only argument.
-
-        run          - user's run-script -- the payload invoked by job.rc
       work/ - directory where work is done
               may be a symbolic link to a node-local filesystem
               (e.g. when JobSpec.directory was set manually)
       log/  - directory holding logs in the naming scheme,
            console        - log messages from psik itself
-           stdout.$jobndx - stdout and stderr logs from `run` portion of job.rc
+           stdout.$jobndx - stdout and stderr logs from executing the jobscript itself
            stderr.$jobndx - Note that jobndx is sequential from 1.
 ```
 
@@ -149,12 +111,13 @@ for a batch queue system that transfers across many backends:
     Usage: psik [OPTIONS] COMMAND [ARGS]...
 
     Commands:
+      submit   Create a job directory from a jobspec.json file.
+      start    Re-start a job in a final state.
+      poll     Sync info. from a remote job.
       cancel   Cancel a job.
       ls       List jobs.
       reached  Record that a job has entered the given state.
       rm       Remove job tracking directories for the given jobstamps.
-      run      Create a job directory from a jobspec.json file.
-      status   Read job status information and history.
 
 ## Python interface
 
@@ -162,7 +125,7 @@ Psi\_k can also be used as a python package:
 
     from psik import Config, JobManager, JobSpec, JobAttributes, ResourceSpec
 
-    cfg = Config(prefix="/proj/SB1/.psik", backends={"default":{
+    cfg = Config(prefix="/proj/SB1/psik", backends={"default":{
                         "type": "slurm",
                         "queue_name": "batch",
                         "project_name": "plaid"}})
@@ -232,7 +195,7 @@ Compared to another implementation of a portable API spec,
 Psi\_k uses mostly the same key data models, with a few changes
 to the data model, and three changes to the execution semantics:
 
-1. Callback scripts are inserted into job.rc rather than polling the backend.
+1. Callbacks are run during `job.execute`, making polling unnecessary
 2. The user's job script is responsible for calling $mpirun
    in order to invoke parallel steps.
 3. The default launcher is backend-dependent (e.g. srun for slurm, etc.).
@@ -256,7 +219,6 @@ to the data model, and three changes to the execution semantics:
   - ~~launcher~~ -- launcher has been removed and the `$mpirun` environment variable is defined within job scripts instead
   - _callback_  -- a callback URL to which the executor can report job progress
   - _cb_secret_ -- a secret token which the executor can use to sign its callbacks
-  - _client_secret_ -- used internally by a server to validate any webhooks received
 
 Stdin/stdout/stderr paths have been removed.  All input
 and output files are captured in a well-known location.
@@ -282,31 +244,23 @@ only backend configuration values, not job attributes.
 
 ## Adding a new batch queue backend to Psi\_k
 
-Internally, $\Psi_k$ implements each backend by including three templates:
+Internally, backends are implemented in $\Psi_k$
+by `submit`, `poll`, and `cancel` functions
+within python modules in `psik/backends/`.
 
-psik/templates/
+To add a backend, create a file in this
+directory that implements all 3 functions.
 
- * `<backend>/submit`  -- Submit a job to the queue.
-                          Output to stderr is printed to the user's terminal.
-                          On success, print only the backend's native job\id
-                          to stdout and return 0.
-                          On failure, must return nonzero. 
-
- * `<backend>/job`     -- Job submitted to the queue.
-                          Should translate job resource and backend config
-                          in a way the backend understands.
-                          Must call psik logging at appropriate points. 
-                          Must setup "Environment during job execution"
-                          as specified above.
-
- * `<backend>/cancel`  -- Ask the backend to cancel the job.
-                          Must call psik logging at appropriate points.
-
-To add a backend, implement all 3 templates.
-You probably also need an empty `__init__.py`
-file so that the templates are included in the package.
 This should be all you need for your new backend to be
-picked up by the `psik/templates/renderer.py`.
+picked up by `psik/backend.py`.  When
+`tests/test_backends.py` runs, all backend
+modules are dynamically loaded and type-checked.
+
+You are responsible to test the proper
+functioning of your backend by submitting
+a job, polling, and cancelling using
+the psik front-end.
+
 
 # Developing
 
@@ -318,18 +272,23 @@ repo on github and check out your local copy.
     git remote add upstream https://github.com/frobnitzem/psik.git
 
 Then install its dependencies into a virtual environment
-managed by the poetry tool.
+managed by the uv tool.
 
-    pip3 install poetry
-    poetry install
-    poetry run pytest --cov=psik tests/ --cov-report html
+    pip3 install uv
+    uv sync --all-extras
+    uv run pytest --cov=psik tests/ --cov-report html
 
 Then create a new branch and edit away.
 
     git checkout -b new_feature
     git commit -a
+    uv run mypy psik
     git push -u origin new_feature
 
 Don't forget to create an issue and/or pull request with
 your suggestions.
+
+Note: to debug file locking, use
+
+    strace -f -e trace=flock psik run example.yaml
 

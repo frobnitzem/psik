@@ -6,7 +6,6 @@ import pytest
 from psik.config import load_config, Config
 from psik.manager import JobManager
 from psik.models import JobSpec, ResourceSpec, BackendConfig, JobState
-import psik.templates as templates
 
 cfg = """{
   "prefix": "%s",
