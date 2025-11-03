@@ -81,7 +81,7 @@ class ReadLock(FLock):
 
     def __init__(self, fd, blocking=True):
         flags = LOCK_SH
-        if blocking:
+        if not blocking:
             flags |= LOCK_NB
         super().__init__(fd, flags)
 
@@ -94,7 +94,7 @@ class WriteLock(FLock):
 
     def __init__(self, fd, blocking=True):
         flags = LOCK_EX
-        if blocking:
+        if not blocking:
             flags |= LOCK_NB
         super().__init__(fd, flags)
 

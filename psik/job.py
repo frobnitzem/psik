@@ -12,7 +12,7 @@ from time import time as timestamp
 from anyio import Path as aPath
 
 from .models import JobSpec, JobState, Callback, Transition, BackendConfig
-from .statfile import read_csv, append_csv
+from .statfile import read_csv, append_csv, WriteLock, open_file
 from .exceptions import InvalidJobException, SubmitException, CallbackException
 from .web import post_json
 from .console import run_shebang, runcmd
@@ -64,34 +64,43 @@ class Job:
         return self
 
     async def reached(self, jobndx: int, state: JobState,
-                      info: str = "", fyi: bool = False) -> bool:
+                      info: str = "", backdate: Optional[float] = None) -> bool:
         """ Mark job as having reached the given jobndx,state.
             info is usually the job_id (when known).
 
-            If the `fyi` parameter is True, no callbacks
-            will be triggered.  Also, the history will only
-            be updated if the transition is not yet present.
+            If the `backdate` parameter is set, it will be recorded
+            as the transition time, and no callbacks will be triggered.
+            This follows the convention that whoever collects the
+            timestamp runs the callback.
 
             May throw CallbackException.
         """
-        t = timestamp()
+        if backdate is None:
+            t = timestamp()
+        else:
+            t = backdate
         data  = Transition(time=t, jobndx=jobndx, state=state, info=info)
-        if fyi: # filter out this transition if already seen
-            if not self.valid:
-                await self.read_info()
-            for trs in self.history:
-                if trs.jobndx == jobndx and trs.state == state:
-                    return False
+        #if backdate is not None: # filter out this transition if already seen
+        #    if not self.valid:
+        #        await self.read_info()
+        #    for trs in self.history:
+        #        if trs.jobndx == jobndx and trs.state == state:
+        #            return False
         self.history.append( data )
         await append_csv(self.base / 'status.csv', *data.fields())
-        if fyi:
+        if backdate is not None:
             return True
 
         if not self.valid:
             spec = await (self.base/'spec.json').read_text(
                                                     encoding='utf-8')
             self.spec = JobSpec.model_validate_json(spec)
+        return await self.send_callback(jobndx, state, info)
 
+    async def send_callback(self,
+                            jobndx: int,
+                            state: JobState,
+                            info: str) -> bool:
         token = None
         if self.spec.cb_secret:
             token = self.spec.cb_secret.get_secret_value()
@@ -146,12 +155,23 @@ class Job:
             await self.read_info()
 
         jobndx, _ = self.summarize()
-        native_job_id = await submit_at(self.backend.type, self, jobndx)
-        if native_job_id is None:
-            raise SubmitException("")
-
+        # inline some of self.reached so that we can
+        # submit with the file lock held.
+        async with await open_file(self.base/'status.csv', 'a',
+                                   encoding='utf-8') as f:
+            async with WriteLock(f):
+                t0 = timestamp()
+                native_job_id = await submit_at(self.backend.type, self, jobndx)
+                if native_job_id is None:
+                    raise SubmitException("Job submission failed.")
+                trs = Transition(time=t0,
+                                 jobndx=jobndx,
+                                 state=JobState.queued,
+                                 info=native_job_id)
+                await f.write(','.join(map(str, trs.fields())) + '\n')
+        self.history.append(trs)
         try:
-            await self.reached(jobndx, JobState.queued, native_job_id)
+            await self.send_callback(jobndx, JobState.queued, native_job_id)
         except CallbackException as e:
             _logger.error("%s: Error sending callback: %s",
                               self.stamp, e)
@@ -165,7 +185,10 @@ class Job:
             It records the script return code as success
             or failure.
         """
-        await self.reached(jobndx, JobState.active)
+        try:
+            await self.reached(jobndx, JobState.active)
+        except CallbackException as e:
+            _logger.error("%s: Error sending callback: %s", self.stamp, e)
 
         cwd = Path()
         try:
@@ -195,18 +218,20 @@ class Job:
         finally:
             os.chdir(str(cwd))
 
-        if retcode == 0:
-            await self.reached(jobndx, JobState.completed)
-        else:
-            await self.reached(jobndx, JobState.failed, ret)
+        try:
+            if retcode == 0:
+                await self.reached(jobndx, JobState.completed)
+            else:
+                await self.reached(jobndx, JobState.failed, ret)
+        except CallbackException as e:
+            _logger.error("%s: Error sending callback: %s", self.stamp, e)
 
         return retcode
 
-    async def poll(self) -> JobState:
+    async def poll(self) -> None:
         if not self.valid:
             await self.read_info()
-        ans = await poll_at(self.backend.type, [self.stamp])
-        return ans[0]
+        await poll_at(self.backend.type, self)
 
     async def cancel(self) -> None:
         # Prevent a race condition by recording this first.

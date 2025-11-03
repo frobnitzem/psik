@@ -86,7 +86,8 @@ class JobManager:
         attr.update(jobspec.attributes)
         jobspec.attributes = attr
 
-        return await create_job(base, jobspec, backend.model_dump_json())
+        return await create_job(base, jobspec,
+                                backend.model_dump_json(exclude_defaults=True))
 
     async def ls(self) -> AsyncIterator[Job]:
         """ Async generator of Job entries.
@@ -114,7 +115,6 @@ async def create_job(base : aPath, jobspec : JobSpec,
     assert await base.is_dir()
     assert jobspec.directory is not None and \
             await aPath(jobspec.directory).is_dir()
-    await (base/'scripts').mkdir()
     await (base/'log').mkdir()
     await create_file(base/'spec.json', jobspec.model_dump_json(indent=4), 0o644)
     # log completion of 'new' status

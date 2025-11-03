@@ -4,25 +4,10 @@ import os
 import sys
 import signal
 import logging
+from contextlib import redirect_stdout, redirect_stderr
 _logger = logging.getLogger(__name__)
 
 from psik import Job, JobState
-
-def sigchld_handler(signum, frame):
-    # Use a loop with os.WNOHANG to reap all terminated children (to handle race conditions)
-    try:
-        while True:
-            # os.waitpid returns (0, 0) if no child is ready to be waited for
-            pid, status = os.waitpid(-1, os.WNOHANG)
-            if pid == 0:
-                break # No more children to reap
-            # Can log exit status here.
-    except ChildProcessError:
-        # Expected error if no children are left
-        pass
-    except Exception as e:
-        # Handle unexpected errors
-        _logger.error("Error during waitpid: %s", e)
 
 async def submit(job: Job, jobndx: int) -> Optional[str]:
     """
@@ -36,13 +21,13 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
     try:
         pid = os.fork()
         if pid > 0: # ORIGINAL PARENT (P)
-            signal.signal(signal.SIGCHLD, sigchld_handler)
             os.close(write_fd) # close the write end
-            try:
-                grandchild_pid_bytes = os.read(read_fd, 100)
-            except InterruptedError:
-                grandchild_pid_bytes = os.read(read_fd, 100)
+            grandchild_pid_bytes = os.read(read_fd, 100)
             os.close(read_fd) # Close the read end
+            try:
+                pid, status = os.waitpid(pid, 0)
+            except ChildProcessError as e:
+                _logger.error(f"ChildProcessError waiting on {pid}: {e}")
             return grandchild_pid_bytes.decode().strip()
     except OSError as err:
         try:
@@ -51,11 +36,13 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
         except:
             pass
         _logger.error(f'Fork #1 failed: %s', err)
-        return None
 
+    fork_job(write_fd, job, jobndx)
+    return None
+
+def fork_job(write_fd: int, job: Job, jobndx: int) -> None:
     # create a session leader
     os.setsid()
-
     #os.umask(0) # remove umask restrictions
 
     # 2. Second fork.
@@ -69,30 +56,29 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
                 os.close(write_fd)
             except Exception as e:
                 _logger.error('Error writing PID to pipe: %s', e)
-            # Exit child (the session leader)
-            sys.exit(0)
+            # session leader exits
+            os._exit(0)
+        else:
+            pass # grandchild continues below
     except OSError as err:
         _logger.error('Fork #2 failed: %s', err)
-        sys.exit(1)
+        os._exit(1)
 
     # 3. Redirect standard file descriptors
-    #sys.stdout.flush()
-    #sys.stderr.flush()
-    #si = open(os.devnull, 'r')
-    #so = open(os.devnull, 'a+')
-    #se = open(os.devnull, 'a+')
-    #os.dup2(si.fileno(), sys.stdin.fileno())
-    #os.dup2(so.fileno(), sys.stdout.fileno())
-    #os.dup2(se.fileno(), sys.stderr.fileno())
+    with open(str(job.base/"log"/"console"), "a+") as f:
+        # Use both context managers to redirect stdout and stderr to `f`
+        with redirect_stdout(f), redirect_stderr(f):
+            # 4. hand off to job.execute
+            asyncio.run(job.execute(jobndx))
+    os._exit(0)
 
-    # 4. hand off to job.execute
-    #asyncio.run(job.execute(jobndx))
-    await job.execute(jobndx)
-    sys.exit(0)
+async def poll(job: Job) -> None:
     return None
 
-async def poll(jobids: List[str]) -> List[JobState]:
-    return [JobState.failed for i in jobids]
-
 async def cancel(jobinfos: List[str]) -> None:
+    for pid in jobinfos:
+        try:
+            os.kill(int(pid), signal.SIGTERM) # use SIGINT?
+        except Exception as e:
+            _logger.error(f"Error canceling {pid}: {e}")
     return None

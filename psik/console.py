@@ -40,7 +40,7 @@ def signal_handler(sig, frame):
     Custom signal handler to propagate the signal to the child process.
     """
     global current_process
-    
+
     # Check if a child process is running
     if current_process and current_process.poll() is None:
         _logger.warning("\nParent Python process caught signal %d. Propagating to child process (PID: %d)...", sig, current_process.pid)
@@ -61,7 +61,8 @@ def signal_handler(sig, frame):
             current_process.wait()
 
     # Re-raise the signal to terminate the Python process itself after cleanup
-    sys.exit(128 + sig)
+    #sys.exit(128 + sig)
+    os._exit(128+sig)
 
 def parse_shebang(script: str) -> List[str]:
     """
@@ -118,8 +119,8 @@ def run_shebang(
 
     interpreter = parse_shebang(script_content)
     if not interpreter:
-        _logger.error("Script does not contain a shebang pattern.")
-        return 7
+        _logger.debug("Script does not contain a shebang pattern. Defaulting to /bin/bash")
+        interpreter = ["/bin/bash"]
     
     # 1. Open the files for redirection
     try:

@@ -90,7 +90,7 @@ def _lookup(backend, name):
                 f".templates.{backend}", package="psik")
     return getattr(mod, name)
 
-async def submit_at(backend: str, job: 'Job', jobndx: int) -> Optional[str]: # type: ignore[name-defined]
+async def submit_at(backend: str, job, jobndx: int) -> Optional[str]: # type: ignore[name-defined]
     submit = _lookup(backend, "submit")
     return await submit(job, jobndx)
 
@@ -98,9 +98,9 @@ async def cancel_at(backend: str, jobids: List[str]) -> None:
     cancel = _lookup(backend, "cancel")
     await cancel(jobids)
 
-async def poll_at(backend: str, jobids: List[str]) -> List[JobState]:
+async def poll_at(backend: str, job) -> None:
     poll = _lookup(backend, "poll")
-    return await poll(jobids)
+    await poll(job)
 
 def check(backend):
     try:
@@ -115,7 +115,7 @@ def check(backend):
     err = check_function_signature(cancel, [List[str], None])
     if err:
         raise KeyError(f"{backend}.cancel: {err}")
-    err = check_function_signature(poll, [List[str], List[JobState]])
+    err = check_function_signature(poll, ['Job', None])
     if err:
         raise KeyError(f"{backend}.poll: {err}")
 

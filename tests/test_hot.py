@@ -40,7 +40,7 @@ def test_hot_start(tmp_path):
     err = (base/'log'/'stderr.1').read_text()
     assert err.strip() == ""
     stat = (base/'status.csv').read_text().split()
-    assert len(stat) == 4
+    assert len(stat) == 3
     assert 'completed' in stat[-1]
 
 def test_zhot_start(tmp_path):
@@ -66,5 +66,5 @@ def test_zhot_start(tmp_path):
     err = (base/'log'/'stderr.1').read_text()
     assert err.strip() == ""
     stat = (base/'status.csv').read_text().split()
-    assert len(stat) == 4
+    assert len(stat) == 3
     assert 'completed' in stat[-1]

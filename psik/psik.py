@@ -23,8 +23,9 @@ from .exceptions import CallbackException
 from .logs import setup_log, setup_logfile
 
 def run_async(f):
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(f)
+    #loop = asyncio.get_event_loop()
+    #return loop.run_until_complete(f)
+    return asyncio.run(f)
 
 def setup_logging(v, vv):
     setup_log(True, v, vv)
@@ -56,7 +57,7 @@ def status(stamps: List[str] = typer.Argument(..., help="Job's timestamp / handl
         print()
         print("    time ndx state info")
         for line in job.history:
-            print("    %.3f %3d %10s %8d" % (line.time, line.jobndx, line.state.value, line.info))
+            print("    %.3f %3d %10s %8s" % (line.time, line.jobndx, line.state.value, line.info))
 
     async def loop_stat():
         for stamp in stamps:
