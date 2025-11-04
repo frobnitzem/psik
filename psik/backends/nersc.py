@@ -25,7 +25,7 @@ from ..zipstr import dir_to_str
 from .slurm import mk_args
 
 slurm_script = """#!/bin/bash
-%(slurm_opts)
+%(slurm_opts)s
 
 if ! [ -x %(venv)s/bin/psik ]; then
     if ! which uv; then
@@ -44,7 +44,7 @@ if ! [ -x %(venv)s/bin/psik ]; then
 
     echo "Installing psik to %(venv)s"
     uv venv --no-project --managed-python --python 3.12 %(venv)s
-    uv pip install --python %(venv)/bin/python certified aiohttp psik libenv
+    uv pip install --python %(venv)s/bin/python certified aiohttp psik libenv
     mkdir -p %(venv)s/etc
     cat >%(venv)s/etc/psik.json <<__EOF__
 %(config)s
@@ -57,7 +57,7 @@ export nodes=$SLURM_JOB_NUM_NODES
 export jobid=$SLURM_JOB_ID
 export mpirun=srun
 # use exec to forward signals properly
-exec %(venv)/bin/psik hot-start %(stamp)s %(jobndx)d '%(jobspec)s' '%(zstr)s'
+exec %(venv)s/bin/psik hot-start %(stamp)s %(jobndx)d '%(jobspec)s' '%(zstr)s'
 """
 
 def quote(s: str) -> str:
@@ -90,7 +90,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
     cfg = remote_config.model_dump_json(indent=2)
     # zip up the contents of the working dir.
     zstr = dir_to_str(job.spec.directory)
-    jobscript = slurm_script.format(
+    jobscript = slurm_script % dict(
         slurm_opts = slurm_opts,
         venv = remote_venv,
         config = cfg,
@@ -101,7 +101,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
     )
 
     keypath = Path(os.environ["HOME"]) / ".superfacility" / "key.pem"
-    _logger.debug("Submitting job script to NERSC: %s", " ".join(map(str,args)))
+    _logger.debug("Submitting job script to NERSC: %s", jobscript)
     # Note: beware the dreaded {"detail":"Not authenticated"}
     try:
         async with AsyncClient(key=keypath) as client:

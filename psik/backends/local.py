@@ -64,12 +64,18 @@ def fork_job(write_fd: int, job: Job, jobndx: int) -> None:
         _logger.error('Fork #2 failed: %s', err)
         os._exit(1)
 
+    pid = os.getpid()
+
     # 3. Redirect standard file descriptors
     with open(str(job.base/"log"/"console"), "a+") as f:
         # Use both context managers to redirect stdout and stderr to `f`
         with redirect_stdout(f), redirect_stderr(f):
             # 4. hand off to job.execute
-            asyncio.run(job.execute(jobndx))
+            asyncio.run(job.execute(jobndx,
+                                    jobid=str(pid),
+                                    mpirun="mpirun",
+                                    nodes="1",
+                       ))
     os._exit(0)
 
 async def poll(job: Job) -> None:

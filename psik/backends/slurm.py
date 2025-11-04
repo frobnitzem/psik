@@ -31,8 +31,6 @@ async def main():
 asyncio.run(main())
 """
 
-# TODO: set jobid, mpirun, nodes in local runner...
-
 def mk_args(spec: JobSpec, extra: ExtraInfo) -> List[str]:
     assert spec.directory is not None
     args: List[str] = []
@@ -81,7 +79,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
     Create a templated run-script and execute it
     via SLURM.
     """
-    jobscript = slurm_script.format(
+    jobscript = slurm_script % dict(
         psik_python = sys.executable,
         base = job.base,
         jobndx = jobndx,
