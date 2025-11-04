@@ -11,6 +11,7 @@ from pathlib import Path
 import logging
 _logger = logging.getLogger(__name__)
 
+_default_encoding = sys.getdefaultencoding() # or just use utf-8...
 
 """
 from contextlib import contextmanager
@@ -151,7 +152,7 @@ def run_shebang(
             # 1. Write the script content to the process's standard input
             # and close stdin to signal EOF, allowing the interpreter to start execution.
             current_process.stdin.write(
-                    script_content.encode(sys.getdefaultencoding())
+                    script_content.encode(_default_encoding)
                 )
             current_process.stdin.close()
 
@@ -195,20 +196,25 @@ def run_shebang(
 
 async def runcmd(prog : Union[Path,str], *args : str,
                  cwd : Union[Path,str,None] = None,
-                 expect_ok : Optional[bool] = True) -> Tuple[int,str,str]:
+                 expect_ok : Optional[bool] = True,
+                 stdin: str = "") -> Tuple[int,str,str]:
     """Run the given command inside an asyncio subprocess.
+
+       If stdin is present, it is piped into the command.
        
        Returns (return code : int, stdout : str, stderr : str)
     """
     pipe = asyncio.subprocess.PIPE
     proc = await asyncio.create_subprocess_exec(
                     prog, *args, cwd=cwd,
+                    stdin=pipe,
                     stdout=pipe, stderr=pipe)
-    stdout, stderr = await proc.communicate()
+    stdout, stderr = await proc.communicate(
+                                stdin.encode(_default_encoding))
     # note stdout/stderr are binary
 
-    out = stdout.decode('utf-8')
-    err = stderr.decode('utf-8')
+    out = stdout.decode(_default_encoding)
+    err = stderr.decode(_default_encoding)
     if len(stdout) > 0:
         _logger.info('%s stdout: %s', prog, out)
     if len(stderr) > 0:
@@ -217,10 +223,10 @@ async def runcmd(prog : Union[Path,str], *args : str,
     ret = -1
     if proc.returncode is not None:
         ret = proc.returncode
-    if expect_ok != (proc.returncode == 0):
-        _logger.error('%s returned %d', prog, ret)
     if expect_ok is None:
         _logger.info('%s returned %d', prog, ret)
+    elif expect_ok != (proc.returncode == 0):
+        _logger.error('%s returned %d', prog, ret)
 
     return ret, out, err
 

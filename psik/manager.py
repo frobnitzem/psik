@@ -10,7 +10,7 @@ from time import time as timestamp
 
 from anyio import Path as aPath
 
-from .models import JobSpec, BackendConfig, JobState
+from .models import JobSpec, JobState, ExtraInfo
 from .statfile import append_csv, create_file
 from .job import Job
 from .config import Config
@@ -86,8 +86,9 @@ class JobManager:
         attr.update(jobspec.attributes)
         jobspec.attributes = attr
 
-        return await create_job(base, jobspec,
-                                backend.model_dump_json(exclude_defaults=True))
+        info = ExtraInfo(backend=backend) \
+             . model_dump_json(exclude_defaults=True)
+        return await create_job(base, jobspec, info)
 
     async def ls(self) -> AsyncIterator[Job]:
         """ Async generator of Job entries.
@@ -104,7 +105,7 @@ class JobManager:
                     _logger.info("Unable to load %s", jobdir, exc_info=e)
 
 async def create_job(base : aPath, jobspec : JobSpec,
-                     backend: str) -> Job:
+                     info: str) -> Job:
     """ Create job files from layout info.
 
             Fills out the "base / " subdirectory:
@@ -118,5 +119,5 @@ async def create_job(base : aPath, jobspec : JobSpec,
     await (base/'log').mkdir()
     await create_file(base/'spec.json', jobspec.model_dump_json(indent=4), 0o644)
     # log completion of 'new' status
-    await append_csv(base/'status.csv', timestamp(), 0, 'new', backend)
+    await append_csv(base/'status.csv', timestamp(), 0, 'new', info)
     return await Job(base)

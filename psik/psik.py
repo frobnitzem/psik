@@ -9,6 +9,7 @@ import logging
 _logger = logging.getLogger(__name__)
 
 import typer
+import yaml
 
 from .config import load_config
 from .job import Job, runcmd
@@ -37,6 +38,29 @@ V2 = Annotated[bool, typer.Option("-vv", help="show debug-level logs")]
 CfgArg = Annotated[Optional[Path], typer.Option("--config",
                    envvar="PSIK_CONFIG",
                    help="Config file path [default ~/.config/psik.json].")]
+
+@app.command()
+def ls(stamps: List[str] = typer.Argument(None),
+       v: V1 = False,
+       vv: V2 = False,
+       cfg: CfgArg = None):
+    """
+    List jobs.
+    """
+    if stamps:
+        return status(stamps, v, vv, cfg)
+
+    setup_logging(v, vv)
+    config = load_config(cfg)
+    mgr = JobManager(config)
+    async def show():
+        print(f"{'jobid':<15} {'state':>10} jobndx info name")
+        async for job in mgr.ls():
+            #line.time, line.jobndx, line.state.value, line.info))
+            h = job.history[-1]
+            #print(f"{job.base} {job.spec.name} {h.time} {h.jobndx} {h.state.value} {h.info}")
+            print(f"{job.stamp:<15} {h.state.value:<10} {h.jobndx:>6} {h.info:>4} {job.spec.name}")
+    run_async(show())
 
 @app.command()
 def status(stamps: List[str] = typer.Argument(..., help="Job's timestamp / handle."),
@@ -94,6 +118,47 @@ def rm(stamps : List[str] = typer.Argument(...,
     raise typer.Exit(code=err)
 
 @app.command()
+def submit(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
+        submit  : Annotated[bool, typer.Option(help="Submit job to queue")] = True,
+        v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+    """ Synonym for run
+    """
+    run(jobspec, submit, v, vv, cfg)
+
+@app.command()
+def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
+        submit  : Annotated[bool, typer.Option(help="Submit job to queue")] = True,
+        v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+    """
+    Create a job directory from a jobspec.json file.
+
+    If submit is True (default), the job will also be submitted
+    to the backend's job queue.  Use --no-submit to prevent this.
+    """
+
+    setup_logging(v, vv)
+    config = load_config(cfg)
+    mgr = JobManager(config)
+    try:
+        spec = load_jobspec(jobspec)
+    except Exception as e:
+        _logger.exception("Error parsing JobSpec from file %s", jobspec)
+        raise typer.Exit(code=1)
+
+    async def create_submit(spec, submit):
+        job = await mgr.create(spec)
+        setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
+        if submit:
+            await job.submit()
+        return job
+        
+    job = run_async( create_submit(spec, submit) )
+    if submit:
+        print(f"Queued {job.stamp}")
+    else:
+        print(f"Created {job.stamp}")
+
+@app.command()
 def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
            v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
@@ -107,6 +172,59 @@ def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
     run_async( job.submit() )
     print(f"Started {job.stamp}")
+
+@app.command()
+def poll(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+    """
+    Poll a job's state, retrieving any updates.
+
+    Hint: This action can be triggered by receiving
+          a callback (notification of a state change)
+          from the job itself.
+    """
+    setup_logging(v, vv)
+    config = load_config(cfg)
+    base = config.prefix
+
+    job = Job(base / str(stamp))
+    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
+    run_async( job.poll() )
+
+@app.command()
+def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
+    """
+    Cancel a job.
+    """
+    setup_logging(v, vv)
+    config = load_config(cfg)
+    base = config.prefix
+
+    job = Job(base / str(stamp))
+    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
+    run_async( job.cancel() )
+    print(f"Canceled {job.stamp}")
+
+@app.command()
+def reached(base : str = typer.Argument(..., help="Job's base directory."),
+            jobndx : int = typer.Argument(..., help="Sequential job index."),
+            state : JobState = typer.Argument(..., help="State reached by job."),
+            info  : str = typer.Argument(default="", help="Status info.")):
+    """
+    Record that a job has entered the given state.
+    This script is typically not called by a user, but
+    instead called during a job's (pre-filled) callbacks.
+    """
+    job = Job(base)
+    setup_logfile(str(job.base/'log'/'console'))
+    try:
+        ok = run_async( job.reached(jobndx, state, info) )
+    except CallbackException as e:
+        print("Error sending callback: ", str(e), file=sys.stderr)
+        ok = False
+    if not ok:
+        raise typer.Exit(code=1)
 
 @app.command()
 def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handle.")],
@@ -163,112 +281,3 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
         return await job.execute(jobndx)
 
     sys.exit(run_async( do_hotstart() ))
-
-@app.command()
-def poll(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
-           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
-    """
-    Poll a job's state, retrieving any updates.
-
-    Hint: This action can be triggered by receiving
-          a callback (notification of a state change)
-          from the job itself.
-    """
-    setup_logging(v, vv)
-    config = load_config(cfg)
-    base = config.prefix
-
-    job = Job(base / str(stamp))
-    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
-    run_async( job.poll() )
-
-@app.command()
-def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
-           v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
-    """
-    Cancel a job.
-    """
-    setup_logging(v, vv)
-    config = load_config(cfg)
-    base = config.prefix
-
-    job = Job(base / str(stamp))
-    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
-    run_async( job.cancel() )
-    print(f"Canceled {job.stamp}")
-
-@app.command()
-def reached(base : str = typer.Argument(..., help="Job's base directory."),
-            jobndx : int = typer.Argument(..., help="Sequential job index."),
-            state : JobState = typer.Argument(..., help="State reached by job."),
-            info  : str = typer.Argument(default="", help="Status info.")):
-    """
-    Record that a job has entered the given state.
-    This script is typically not called by a user, but
-    instead called during a job's (pre-filled) callbacks.
-    """
-    job = Job(base)
-    setup_logfile(str(job.base/'log'/'console'))
-    try:
-        ok = run_async( job.reached(jobndx, state, info) )
-    except CallbackException as e:
-        print("Error sending callback: ", str(e), file=sys.stderr)
-        ok = False
-    if not ok:
-        raise typer.Exit(code=1)
-
-@app.command()
-def ls(stamps: List[str] = typer.Argument(None),
-       v: V1 = False,
-       vv: V2 = False,
-       cfg: CfgArg = None):
-    """
-    List jobs.
-    """
-    if stamps:
-        return status(stamps, v, vv, cfg)
-
-    setup_logging(v, vv)
-    config = load_config(cfg)
-    mgr = JobManager(config)
-    async def show():
-        print(f"{'jobid':<15} {'state':>10} jobndx info name")
-        async for job in mgr.ls():
-            #line.time, line.jobndx, line.state.value, line.info))
-            h = job.history[-1]
-            #print(f"{job.base} {job.spec.name} {h.time} {h.jobndx} {h.state.value} {h.info}")
-            print(f"{job.stamp:<15} {h.state.value:<10} {h.jobndx:>6} {h.info:>4} {job.spec.name}")
-    run_async(show())
-
-@app.command()
-def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
-        submit  : Annotated[bool, typer.Option(help="Submit job to queue")] = True,
-        v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
-    """
-    Create a job directory from a jobspec.json file.
-
-    If submit is True (default), the job will also be submitted
-    to the backend's job queue.  Use --no-submit to prevent this.
-    """
-
-    setup_logging(v, vv)
-    config = load_config(cfg)
-    mgr = JobManager(config)
-    try:
-        spec = load_jobspec(jobspec)
-    except Exception as e:
-        _logger.exception("Error parsing JobSpec from file %s", jobspec)
-        raise typer.Exit(code=1)
-
-    async def create_submit(spec, submit):
-        job = await mgr.create(spec)
-        setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
-        if submit:
-            await job.submit()
-        return job
-        
-    job = run_async( create_submit(spec, submit) )
-    if submit:
-        print(f"Queued {job.stamp}")
-    else:
-        print(f"Created {job.stamp}")

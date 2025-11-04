@@ -1,8 +1,10 @@
+name: run
 script: |
   pwd
   echo $jobid $jobndx
   $mpirun hostname
-#backend: defiant
+
+backend: slurm
 resources:
   num_nodes: 2
   duration: 30

@@ -45,6 +45,12 @@ class BackendConfig(BaseModel):
     reservation_id    : Optional[str] = None
     attributes        : Dict[str,str] = {} # backend config. options
 
+# Extra info added to a job at creation time.
+# Usually this is just a copy of the BackendConfig
+# as it was read from the main config file.
+class ExtraInfo(BaseModel):
+    backend: BackendConfig = BackendConfig()
+
 class JobSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name        : Optional[str] = Field(default=None, title="Job name")

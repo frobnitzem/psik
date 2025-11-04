@@ -44,5 +44,4 @@ build-backend = "setuptools.build_meta"
 include-package-data = false
 
 [tool.setuptools.packages.find]
-include = ["certified"]
-exclude = ["docs", "tests"]
+include = ["psik"]

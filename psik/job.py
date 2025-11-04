@@ -11,7 +11,14 @@ from time import time as timestamp
 
 from anyio import Path as aPath
 
-from .models import JobSpec, JobState, Callback, Transition, BackendConfig
+from .models import (
+    JobSpec,
+    JobState,
+    Callback,
+    Transition,
+    BackendConfig,
+    ExtraInfo,
+)
 from .statfile import read_csv, append_csv, WriteLock, open_file
 from .exceptions import InvalidJobException, SubmitException, CallbackException
 from .web import post_json
@@ -19,7 +26,7 @@ from .console import run_shebang, runcmd
 from .backend import submit_at, cancel_at, poll_at
 
 class Job:
-    backend: BackendConfig
+    info: ExtraInfo
 
     def __init__(self, base : Union[str, Path, aPath]):
         """ Construct a job from the information
@@ -59,7 +66,7 @@ class Job:
             except Exception as e:
                 _logger.error("%s: Invalid row in status.csv: %s",
                               self.stamp, step)
-        self.backend = BackendConfig.model_validate_json(self.history[0].info)
+        self.info = ExtraInfo.model_validate_json(self.history[0].info)
         self.valid = True
         return self
 
@@ -117,7 +124,7 @@ class Job:
                                        cb.model_dump_json(),
                                        token) is not None
             except Exception as e:
-                msg = f"{self.spec.callback} <- {cb}"
+                msg = f"{cb} POST to {self.spec.callback}"
                 raise CallbackException(msg) from e
         return True
 
@@ -161,7 +168,7 @@ class Job:
                                    encoding='utf-8') as f:
             async with WriteLock(f):
                 t0 = timestamp()
-                native_job_id = await submit_at(self.backend.type, self, jobndx)
+                native_job_id = await submit_at(self.info.backend.type, self, jobndx)
                 if native_job_id is None:
                     raise SubmitException("Job submission failed.")
                 trs = Transition(time=t0,
@@ -231,7 +238,7 @@ class Job:
     async def poll(self) -> None:
         if not self.valid:
             await self.read_info()
-        await poll_at(self.backend.type, self)
+        await poll_at(self.info.backend.type, self)
 
     async def cancel(self) -> None:
         # Prevent a race condition by recording this first.
@@ -253,4 +260,4 @@ class Job:
 
         ids = [job_id for ndx, job_id in native_ids.items()]
         if len(ids) > 0:
-            await cancel_at(self.backend.type, ids)
+            await cancel_at(self.info.backend.type, ids)
