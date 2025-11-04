@@ -21,7 +21,7 @@ from .models import (
         load_jobspec
 )
 from .exceptions import CallbackException
-from .logs import setup_log, setup_logfile
+from .logs import setup_log, logfile
 
 def run_async(f):
     #loop = asyncio.get_event_loop()
@@ -147,15 +147,15 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
 
     async def create_submit(spec, submit):
         job = await mgr.create(spec)
-        setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
-        if submit:
-            try:
-                await job.submit()
-            except Exception as e:
-                _logger.exception("Error submitting job")
-                print(f"Created {job.stamp}")
-                exit(1)
-        return job
+        with logfile(str(job.base/'log'/'console'), v=v, vv=vv):
+            if submit:
+                try:
+                    await job.submit()
+                except Exception as e:
+                    _logger.exception("Error submitting job")
+                    print(f"Created {job.stamp}")
+                    exit(1)
+            return job
         
     job = run_async( create_submit(spec, submit) )
     if submit:
@@ -164,7 +164,8 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
         print(f"Created {job.stamp}")
 
 @app.command()
-def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+def start(stamps : List[str] = typer.Argument(...,
+                                           help="Job's timestamp / handle."),
            v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     (re)start a job.
@@ -173,13 +174,15 @@ def start(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     config = load_config(cfg)
     base = config.prefix
 
-    job = Job(base / str(stamp))
-    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
-    run_async( job.submit() )
-    print(f"Started {job.stamp}")
+    for stamp in stamps:
+        job = Job(base / str(stamp))
+        with logfile(str(job.base/'log'/'console'), v=v, vv=vv):
+            run_async( job.submit() )
+            print(f"Started {job.stamp}")
 
 @app.command()
-def poll(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+def poll(stamps : List[str] = typer.Argument(...,
+                                          help="Job's timestamp / handle."),
            v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     Poll a job's state, retrieving any updates.
@@ -192,12 +195,14 @@ def poll(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     config = load_config(cfg)
     base = config.prefix
 
-    job = Job(base / str(stamp))
-    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
-    run_async( job.poll() )
+    for stamp in stamps:
+        job = Job(base / str(stamp))
+        with logfile(str(job.base/'log'/'console'), v=v, vv=vv):
+            run_async( job.poll() )
 
 @app.command()
-def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
+def cancel(stamps : List[str] = typer.Argument(...,
+                                           help="Job's timestamp / handle."),
            v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     Cancel a job.
@@ -206,10 +211,11 @@ def cancel(stamp : str = typer.Argument(..., help="Job's timestamp / handle."),
     config = load_config(cfg)
     base = config.prefix
 
-    job = Job(base / str(stamp))
-    setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
-    run_async( job.cancel() )
-    print(f"Canceled {job.stamp}")
+    for stamp in stamps:
+        job = Job(base / str(stamp))
+        with logfile(str(job.base/'log'/'console'), v=v, vv=vv):
+            run_async( job.cancel() )
+            print(f"Canceled {job.stamp}")
 
 @app.command()
 def reached(base : str = typer.Argument(..., help="Job's base directory."),
@@ -222,12 +228,13 @@ def reached(base : str = typer.Argument(..., help="Job's base directory."),
     instead called during a job's (pre-filled) callbacks.
     """
     job = Job(base)
-    setup_logfile(str(job.base/'log'/'console'))
-    try:
-        ok = run_async( job.reached(jobndx, state, info) )
-    except CallbackException as e:
-        print("Error sending callback: ", str(e), file=sys.stderr)
-        ok = False
+    with logfile(str(job.base/'log'/'console')):
+        try:
+            ok = run_async( job.reached(jobndx, state, info) )
+        except CallbackException as e:
+            _logger.error("Error sending callback: %s", e)
+            ok = False
+
     if not ok:
         raise typer.Exit(code=1)
 
@@ -279,10 +286,10 @@ def hot_start(stamp: Annotated[str, typer.Argument(help="Job's timestamp / handl
             job = await job
 
         assert job.spec.directory is not None
-        setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
-        os.chdir(job.spec.directory)
-        if zstr is not None:
-            str_to_dir(zstr, job.spec.directory)
-        return await job.execute(jobndx)
+        with logfile(str(job.base/'log'/'console'), v=v, vv=vv):
+            os.chdir(job.spec.directory)
+            if zstr is not None:
+                str_to_dir(zstr, job.spec.directory)
+            return await job.execute(jobndx)
 
     sys.exit(run_async( do_hotstart() ))

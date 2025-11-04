@@ -1,6 +1,7 @@
 # https://stackoverflow.com/questions/13733552/logger-configuration-to-log-to-file-and-print-to-stdout
 import sys
 import logging
+from contextlib import contextmanager
 
 # Logging formatter supporting colorized output
 class LogFormatter(logging.Formatter):
@@ -49,7 +50,8 @@ def setup_log(color_console = True,
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
 
-def setup_logfile(logfile, v=False, vv=False):
+@contextmanager
+def logfile(logfile, v=False, vv=False):
     if logfile is None:
         return
 
@@ -69,3 +71,8 @@ def setup_logfile(logfile, v=False, vv=False):
     logfile_formatter = LogFormatter()
     logfile_handler.setFormatter(logfile_formatter)
     logger.addHandler(logfile_handler)
+
+    try:
+        yield
+    finally:
+        logger.removeHandler(logfile_handler)
