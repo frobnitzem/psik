@@ -9,7 +9,7 @@ import logging
 _logger = logging.getLogger(__name__)
 
 import typer
-import yaml
+import yaml # type: ignore[import-untyped]
 
 from .config import load_config
 from .job import Job, runcmd
@@ -149,7 +149,12 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
         job = await mgr.create(spec)
         setup_logfile(str(job.base/'log'/'console'), v=v, vv=vv)
         if submit:
-            await job.submit()
+            try:
+                await job.submit()
+            except Exception as e:
+                _logger.exception("Error submitting job")
+                print(f"Created {job.stamp}")
+                exit(1)
         return job
         
     job = run_async( create_submit(spec, submit) )

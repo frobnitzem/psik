@@ -34,11 +34,13 @@ asyncio.run(main())
 # TODO: set jobid, mpirun, nodes in local runner...
 
 def mk_args(spec: JobSpec, extra: ExtraInfo) -> List[str]:
+    assert spec.directory is not None
     args: List[str] = []
 
     if spec.name:
         args.extend(["--job-name", spec.name])
-    args.extend(["--chdir", spec.directory])
+    # Interferes with remote launch. Done inside exec anyway.
+    #args.extend(["--chdir", spec.directory])
     if spec.inherit_environment:
         args.extend(["--export", "ALL"])
     else:
