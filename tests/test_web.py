@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 import pytest_asyncio
 
@@ -30,6 +32,12 @@ async def cb_server(aiohttp_server):
     return await aiohttp_server(app)
 ### end fixture ###
 
+@pytest_asyncio.fixture
+async def cb_client(aiohttp_client):
+    app = web.Application()
+    app.router.add_post('/callback', post_cb)
+    return await aiohttp_client(app)
+
 def test_sign():
     ans = sign_message("Hello, World!", "It's a Secret to Everybody")
     assert ans == "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17"
@@ -45,7 +53,8 @@ def test_verify():
         verify_signature("X", "Y", None)
 
 @pytest.mark.asyncio
-async def test_local_cb(cb_server, aiohttp_server):
+async def test_local_cb(cb_server): #cb_client):
+    #cb_server = cb_client.server
     ans = await post_json(str(cb_server.make_url("/callback")),
                 '{"name": "hello", "script": "echo hello; pwd"}',
 

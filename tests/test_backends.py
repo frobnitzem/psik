@@ -7,7 +7,7 @@ from psik.models import JobSpec, JobState, BackendConfig, Callback, Transition
 from psik.config import Config
 from psik.backend import list_backends
 
-from .test_web import cb_server, cb_value
+from .test_web import cb_client, cb_value
 
 def test_backends():
     backends = list_backends()
@@ -65,8 +65,8 @@ async def test_local(tmp_path):
         assert err == '' or err == 'Look out!\n'
 
 @pytest.mark.asyncio
-async def test_local_cb(cb_server, aiohttp_server, tmp_path):
-    server = cb_server
+async def test_local_cb(cb_client, aiohttp_server, tmp_path):
+    server = cb_client.server
     #print(server.make_url('/callback'), server.scheme, server.host, server.port)
     # note also server.app
 

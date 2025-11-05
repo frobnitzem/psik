@@ -1,5 +1,6 @@
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 import hmac
+from urllib.parse import urlsplit, urlunsplit
 import hashlib
 import re
 import logging
@@ -8,8 +9,8 @@ _logger = logging.getLogger(__name__)
 import aiohttp
 from aiohttp.web import HTTPForbidden
 
-def verify_signature(payload_body : str, secret_token : str,
-                     signature_header : Optional[str]) -> None:
+def verify_signature(payload_body: str, secret_token: str,
+                     signature_header: Optional[str]) -> None:
     """Verify that the payload was sent from GitHub by validating SHA256.
 
     Raise and return 403 if not authorized.
@@ -25,7 +26,7 @@ def verify_signature(payload_body : str, secret_token : str,
     if not hmac.compare_digest(expected_signature, signature_header):
         raise HTTPForbidden(reason="Request signatures didn't match!")
 
-def sign_message(payload_body : str, secret_token : str) -> str:
+def sign_message(payload_body: str, secret_token: str) -> str:
     hash_object = hmac.new(secret_token.encode("utf-8"),
                            msg=payload_body.encode("utf-8"),
                            digestmod=hashlib.sha256)
@@ -50,14 +51,30 @@ async def get_json(url: str,
             #return await response.text()
 """
 
-async def post_json(url : str,
-                    info : str,
-                    token : Optional[str] = None) -> Optional[Any]:
-    headers = {"content-type": "application/json"}
+async def post_json(url: str,
+                    info: str,
+                    token: Optional[str] = None,
+                    headers: Dict[str,str] = {},
+                   ) -> Optional[Any]:
+    headers = dict(headers)
+    headers["content-type"] = "application/json"
     headers["Accept"] = "application/json"
     if token:
         headers["x-hub-signature-256"] = sign_message(info, token)
-    async with aiohttp.ClientSession() as session:
+
+    # Rewrite the URL so that the scheme and netloc appear in the base.
+    (scheme, netloc, path, query, fragment) = urlsplit(url)
+    base = urlunsplit((scheme, netloc,"","",""))
+    url  = urlunsplit(("","",path,query,fragment))
+
+    cert = aiohttp
+    try:
+        from certified import Certified # type: ignore[import-not-found]
+        cert = Certified() # type: ignore[assignment]
+    except ImportError:
+        pass
+
+    async with cert.ClientSession(base) as session:
         async with session.post(url, data=info, headers=headers) \
                     as response:
             if response.status != 200:

@@ -22,6 +22,7 @@ from .models import (
 )
 from .exceptions import CallbackException
 from .logs import setup_log, logfile
+from . import __version__
 
 def run_async(f):
     #loop = asyncio.get_event_loop()
@@ -38,6 +39,13 @@ V2 = Annotated[bool, typer.Option("-vv", help="show debug-level logs")]
 CfgArg = Annotated[Optional[Path], typer.Option("--config",
                    envvar="PSIK_CONFIG",
                    help="Config file path [default ~/.config/psik.json].")]
+
+@app.command()
+def version():
+    """
+    Print psik's version and exit.
+    """
+    print(f"psik version {__version__}")
 
 @app.command()
 def ls(stamps: List[str] = typer.Argument(None),
