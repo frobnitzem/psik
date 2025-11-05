@@ -39,10 +39,11 @@ def mk_args(spec: JobSpec, extra: ExtraInfo) -> List[str]:
         args.extend(["--job-name", spec.name])
     # Interferes with remote launch. Done inside exec anyway.
     #args.extend(["--chdir", spec.directory])
-    if spec.inherit_environment:
-        args.extend(["--export", "ALL"])
-    else:
-        args.extend(["--export", "NONE"])
+    # Interferes with system env-s. Done inside exec anyway.
+    #if spec.inherit_environment:
+    #    args.extend(["--export", "ALL"])
+    #else:
+    #    args.extend(["--export", "NONE"])
     rec = spec.resources
     if rec.duration:
         args.extend(["--time", str(rec.duration)])

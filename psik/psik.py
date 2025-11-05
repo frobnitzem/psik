@@ -62,6 +62,17 @@ def ls(stamps: List[str] = typer.Argument(None),
             print(f"{job.stamp:<15} {h.state.value:<10} {h.jobndx:>6} {h.info:>4} {job.spec.name}")
     run_async(show())
 
+async def stat(base, stamp):
+    job = await Job(base / stamp)
+    #print(job.spec.dump_model_json(indent=4))
+    print(job.spec.name)
+    print("    base: %s"%str(base / stamp))
+    print("    work: %s"%str(job.spec.directory))
+    print()
+    print("    time ndx state info")
+    for line in job.history:
+        print("    %.3f %3d %10s %8s" % (line.time, line.jobndx, line.state.value, line.info))
+
 @app.command()
 def status(stamps: List[str] = typer.Argument(..., help="Job's timestamp / handle."),
            v: V1 = False, vv: V2 = False, cfg: CfgArg = None):
@@ -72,20 +83,9 @@ def status(stamps: List[str] = typer.Argument(..., help="Job's timestamp / handl
     config = load_config(cfg)
     base = config.prefix
 
-    async def stat(stamp):
-        job = await Job(base / stamp)
-        #print(job.spec.dump_model_json(indent=4))
-        print(job.spec.name)
-        print("    base: %s"%str(base / stamp))
-        print("    work: %s"%str(job.spec.directory))
-        print()
-        print("    time ndx state info")
-        for line in job.history:
-            print("    %.3f %3d %10s %8s" % (line.time, line.jobndx, line.state.value, line.info))
-
     async def loop_stat():
         for stamp in stamps:
-            await stat(stamp)
+            await stat(base, stamp)
 
     run_async(loop_stat())
 
@@ -199,6 +199,7 @@ def poll(stamps : List[str] = typer.Argument(...,
         job = Job(base / str(stamp))
         with logfile(str(job.base/'log'/'console'), v=v, vv=vv):
             run_async( job.poll() )
+        run_async( stat(base, stamp) )
 
 @app.command()
 def cancel(stamps : List[str] = typer.Argument(...,
