@@ -14,6 +14,7 @@ slurm_script = """#!%(psik_python)s
 #SBATCH -o %(base)s/log/console
 
 import asyncio
+import os
 import psik
 
 # determine helpful env variables
