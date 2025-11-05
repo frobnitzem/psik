@@ -73,8 +73,8 @@ def fork_job(write_fd: int, job: Job, jobndx: int) -> None:
             # 4. hand off to job.execute
             asyncio.run(job.execute(jobndx,
                                     jobid=str(pid),
-                                    mpirun="mpirun",
-                                    nodes="1",
+                                    #mpirun="mpirun",
+                                    #nodes="1",
                        ))
     os._exit(0)
 
