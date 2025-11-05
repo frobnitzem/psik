@@ -99,6 +99,9 @@ class JobManager:
         data['job']['backend']['attributes'] = [
                  {'key': k, 'value': v} for k, v in attr.items()
              ]
+        data['job']['environment'] = [
+                 {'key': k, 'value': v} for k, v in jobspec.environment.items()
+             ]
         
         tpl = templates.render_all(backend.type, templates.actions, data)
 

@@ -1,7 +1,6 @@
 #!{{rc}}
 {{#job.name}}#SBATCH --job-name="{{.}}"
 {{/job.name}}
-#SBATCH --chdir="{{job.directory}}"
 {{#job.inherit_environment}}#SBATCH --export=ALL
 {{/job.inherit_environment}}
 {{^job.inherit_environment}}#SBATCH --export=NONE
