@@ -8,20 +8,18 @@ on:
 
 jobs:
   build:
-
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        #os: ["ubuntu-latest", "macos-latest", "windows-latest"]
         os: ["ubuntu-latest", "macos-latest"]
         python-version: ["3.9", "3.12"]
 
     steps:
     - uses: ConorMacBride/install-package@v1
       with:
-        brew: rc
-        apt: rc at
-        #choco: no rc on choco
+        apt: at
 
     - uses: actions/checkout@v3
 
@@ -36,16 +34,26 @@ jobs:
         python -m pip install uv
         uv sync --all-extras
 
+    # Lint
     - name: Lint with mypy
-      run: |
-        uv run mypy psik
+      run: uv run mypy psik
 
+    # Execute smoke test
+    - name: Create test config
+      run: echo \{\"prefix\":\"$PWD\"\} >psik.json
+    - name: Create test job
+      run: echo '{"name":"test", "script":"echo Hello world."}'>job.json
+    - name: Run test job
+      run: uv run psik run --config psik.json job.json
+    - name: Show test job progress
+      run: uv run psik ls --config psik.json
+
+    # Full test
     - name: Test with pytest
-      run: |
-        uv run python -m pytest --cov psik tests
+      run: uv run python -m pytest --cov psik tests
 
     - name: Upload coverage to Codecov
-      if: matrix.python-version == 3.11 && startsWith(matrix.os, 'ubuntu')
+      if: matrix.python-version == 3.12 && startsWith(matrix.os, 'ubuntu')
       uses: codecov/codecov-action@v3
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

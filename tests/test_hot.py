@@ -1,5 +1,5 @@
 from pathlib import Path
-import os
+import os, sys
 import re
 
 import pytest
@@ -17,7 +17,9 @@ def test_version():
 
 runner = CliRunner()
 
+@pytest.mark.skipif(sys.platform == 'darwin', reason="Fork+exit confuses OSX")
 def test_hot_start(tmp_path):
+    print(sys.platform)
     cfg = write_config(tmp_path)
 
     result = runner.invoke(app, ["hot-start", "--config", cfg])
@@ -26,7 +28,7 @@ def test_hot_start(tmp_path):
 
     spec = r"""
     { "name": "foo",
-      "script": "#!/usr/bin/env rc\npwd\nhostname\n"
+      "script": "#!/bin/sh\npwd\nhostname\n"
     }
     """
     result = runner.invoke(app, ["hot-start", "--config", cfg, "123.456", "1", spec])
@@ -43,6 +45,7 @@ def test_hot_start(tmp_path):
     assert len(stat) == 3
     assert 'completed' in stat[-1]
 
+@pytest.mark.skipif(sys.platform == 'darwin', reason="Fork+exit confuses OSX")
 def test_zhot_start(tmp_path):
     cfg = write_config(tmp_path)
     setup_dir = tmp_path/"setup"
@@ -52,7 +55,7 @@ def test_zhot_start(tmp_path):
 
     spec = r"""
     { "name": "foo",
-      "script": "#!/usr/bin/env rc\ncat data.txt\n"
+      "script": "#!/bin/sh\ncat data.txt\n"
     }
     """
     result = runner.invoke(app, ["hot-start", "--config", cfg, "7001271.8271", "1", spec, zstr])

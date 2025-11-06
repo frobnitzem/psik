@@ -22,8 +22,8 @@ async def test_at(tmp_path):
 
     mgr = JobManager(config)
     spec = JobSpec(name="hello",
-               script = """#!/usr/bin/env rc
-               echo Look out! >[1=2]
+               script = """#!/bin/sh
+               echo Look out! >&2
                sleep 2
                echo rawr >lion
            """)
@@ -47,8 +47,8 @@ async def test_local(tmp_path):
 
     mgr = JobManager(config)
     spec = JobSpec(name="hello",
-               script = """#!/usr/bin/env rc
-               echo Look out! >[1=2]
+               script = """#!/bin/sh
+               echo Look out! >&2
                sleep 2
                echo rawr >lion
            """, backend="local")
@@ -76,8 +76,8 @@ async def test_local_cb(cb_client, aiohttp_server, tmp_path):
     mgr = JobManager(config)
     spec = JobSpec(name = "hello",
                    callback = str(server.make_url("/callback")),
-                   script = """#!/usr/bin/env rc
-                   echo Look out! >[1=2]
+                   script = """#!/bin/sh
+                   echo Look out! >&2
                    sleep 2
                    echo rawr >lion
            """, backend="local")
