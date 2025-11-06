@@ -32,7 +32,7 @@ def test_app(tmp_path):
     spec = Path(tmp_path/'jobspec.json')
     spec.write_text(r"""
     { "name": "foo",
-      "script": "#!/usr/bin/env rc\npwd >pwd\nhostname >host\n"
+      "script": "#!/bin/sh\npwd >pwd\nhostname >host\n"
     }
     """)
     cfg = str(cfg)
@@ -95,7 +95,7 @@ def test_start(tmp_path):
     spec = Path(tmp_path/'jobspec.json')
     spec.write_text(r"""
     { "name": "foo",
-      "script": "#!/usr/bin/env rc\npwd >pwd\nhostname >host\n"
+      "script": "#!/bin/sh\npwd >pwd\nhostname >host\n"
     }
     """)
     cfg = str(cfg)

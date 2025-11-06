@@ -1,5 +1,6 @@
 from typing import Union, Dict, Tuple, List, Optional, Set
 from io import StringIO
+import os
 import sys
 import logging
 _logger = logging.getLogger(__name__)
@@ -10,12 +11,23 @@ from time import time as timestamp
 
 from anyio import Path as aPath
 
-from .models import JobSpec, JobState, Callback, Transition
-from .statfile import read_csv, append_csv
+from .models import (
+    JobSpec,
+    JobState,
+    Callback,
+    Transition,
+    BackendConfig,
+    ExtraInfo,
+)
+from .statfile import read_csv, append_csv, WriteLock, open_file
 from .exceptions import InvalidJobException, SubmitException, CallbackException
 from .web import post_json
+from .console import run_shebang, runcmd
+from .backend import submit_at, cancel_at, poll_at
 
 class Job:
+    info: ExtraInfo
+
     def __init__(self, base : Union[str, Path, aPath]):
         """ Construct a job from the information
             in its base directory (filesystem path).
@@ -49,30 +61,53 @@ class Job:
                 self.history.append(Transition(time=float(step[0]),
                                                jobndx=int(step[1]),
                                                state=JobState(step[2]),
-                                               info=int(step[3])
+                                               info=step[3],
                                    ))
             except Exception as e:
                 _logger.error("%s: Invalid row in status.csv: %s",
                               self.stamp, step)
+        self.info = ExtraInfo.model_validate_json(self.history[0].info)
         self.valid = True
         return self
 
-    async def reached(self, jobndx : int, state : JobState,
-                      info : int = 0) -> bool:
-        """ Mark job as having reached the given state.
+    async def reached(self, jobndx: int, state: JobState,
+                      info: str = "", backdate: Optional[float] = None) -> bool:
+        """ Mark job as having reached the given jobndx,state.
             info is usually the job_id (when known).
+
+            If the `backdate` parameter is set, it will be recorded
+            as the transition time, and no callbacks will be triggered.
+            This follows the convention that whoever collects the
+            timestamp runs the callback.
 
             May throw CallbackException.
         """
-        t = timestamp()
+        if backdate is None:
+            t = timestamp()
+        else:
+            t = backdate
         data  = Transition(time=t, jobndx=jobndx, state=state, info=info)
+        #if backdate is not None: # filter out this transition if already seen
+        #    if not self.valid:
+        #        await self.read_info()
+        #    for trs in self.history:
+        #        if trs.jobndx == jobndx and trs.state == state:
+        #            return False
         self.history.append( data )
         await append_csv(self.base / 'status.csv', *data.fields())
-        if not self.valid:
-            base = self.base
-            spec = await (base/'spec.json').read_text(encoding='utf-8')
-            self.spec = JobSpec.model_validate_json(spec)
+        if backdate is not None:
+            return True
 
+        if not self.valid:
+            spec = await (self.base/'spec.json').read_text(
+                                                    encoding='utf-8')
+            self.spec = JobSpec.model_validate_json(spec)
+        return await self.send_callback(jobndx, state, info)
+
+    async def send_callback(self,
+                            jobndx: int,
+                            state: JobState,
+                            info: str) -> bool:
         token = None
         if self.spec.cb_secret:
             token = self.spec.cb_secret.get_secret_value()
@@ -89,7 +124,7 @@ class Job:
                                        cb.model_dump_json(),
                                        token) is not None
             except Exception as e:
-                msg = f"{self.spec.callback} <- {cb}"
+                msg = f"{cb} POST to {self.spec.callback}"
                 raise CallbackException(msg) from e
         return True
 
@@ -119,7 +154,7 @@ class Job:
         status[JobState.active] -= done
         return jobndx, status
 
-    async def submit(self) -> Tuple[int,int]:
+    async def submit(self) -> Tuple[int,str]:
         """ Run the job's submit script.
             Return the job's jobndx and native_job_id.
         """
@@ -127,32 +162,83 @@ class Job:
             await self.read_info()
 
         jobndx, _ = self.summarize()
-
-        ret, out, err = await runcmd(str(self.base / 'scripts' / 'submit'), str(jobndx))
-        if ret != 0:
-            raise SubmitException(err)
+        # inline some of self.reached so that we can
+        # submit with the file lock held.
+        async with await open_file(self.base/'status.csv', 'a',
+                                   encoding='utf-8') as f:
+            async with WriteLock(f):
+                t0 = timestamp()
+                native_job_id = await submit_at(self.info.backend.type, self, jobndx)
+                if native_job_id is None:
+                    raise SubmitException("Job submission failed.")
+                trs = Transition(time=t0,
+                                 jobndx=jobndx,
+                                 state=JobState.queued,
+                                 info=native_job_id)
+                await f.write(','.join(map(str, trs.fields())) + '\n')
+        self.history.append(trs)
         try:
-            native_job_id = int(out)
-        except Exception:
-            _logger.error('%s: submit script returned unparsable result: %s',
-                          self.stamp, out)
-            native_job_id = 0
-        try:
-            await self.reached(jobndx, JobState.queued, native_job_id)
+            await self.send_callback(jobndx, JobState.queued, native_job_id)
         except CallbackException as e:
             _logger.error("%s: Error sending callback: %s",
                               self.stamp, e)
 
         return jobndx, native_job_id
 
-    async def hot_start(self, jobndx: int) -> int:
+    async def execute(self, jobndx: int, **env_vars) -> int:
+        """ Hot start sets up the environment variables,
+            then invokes self.spec.script.
+
+            It records the script return code as success
+            or failure.
+        """
         try:
-            await self.reached(jobndx, JobState.queued, jobndx)
+            await self.reached(jobndx, JobState.active)
         except CallbackException as e:
-            _logger.error("%s: Error sending callback: %s",
-                              self.stamp, e)
-        ret, out, err = await runcmd(str(self.base / 'scripts' / 'job'), str(jobndx))
-        return ret
+            _logger.error("%s: Error sending callback: %s", self.stamp, e)
+
+        cwd = Path()
+        try:
+            if not self.valid:
+                await self.read_info()
+
+            # TODO: expand vars like $SLURM_JOB_NUM_NODES
+            os.chdir(str(self.spec.directory))
+            env = dict(self.spec.environment)
+            env.update(env_vars)
+            # should set mpirun and nodes here too...
+            env["jobndx"] = str(jobndx)
+            env["base"] = str(self.base)
+
+            stdout_path = self.base/"log"/f"stdout.{jobndx}"
+            stderr_path = self.base/"log"/f"stderr.{jobndx}"
+
+            retcode = run_shebang(self.spec.script,
+                                  str(stdout_path),
+                                  str(stderr_path),
+                                  timeout=self.spec.resources.duration,
+                                  env=env)
+            ret = str(retcode)
+        except Exception as e:
+            retcode = 7
+            ret = f"psik.hot_start error: {e}"
+        finally:
+            os.chdir(str(cwd))
+
+        try:
+            if retcode == 0:
+                await self.reached(jobndx, JobState.completed)
+            else:
+                await self.reached(jobndx, JobState.failed, ret)
+        except CallbackException as e:
+            _logger.error("%s: Error sending callback: %s", self.stamp, e)
+
+        return retcode
+
+    async def poll(self) -> None:
+        if not self.valid:
+            await self.read_info()
+        await poll_at(self.info.backend.type, self)
 
     async def cancel(self) -> None:
         # Prevent a race condition by recording this first.
@@ -161,7 +247,7 @@ class Job:
         #    raise InvalidJobException("Unable to update job status.")
         await self.read_info()
 
-        native_ids = {}
+        native_ids: Dict[int,str] = {}
         for t in self.history:
             ndx = t.jobndx
             state = t.state
@@ -172,40 +258,6 @@ class Job:
             elif state == JobState.failed:
                 del native_ids[ndx]
 
-        ids = [str(job_id) for ndx, job_id in native_ids.items()]
+        ids = [job_id for ndx, job_id in native_ids.items()]
         if len(ids) > 0:
-            ret, out, err = await runcmd(str(self.base / 'scripts' / 'cancel'),
-                                         *ids)
-            if ret != 0:
-                raise SubmitException(err)
-
-async def runcmd(prog : Union[Path,str], *args : str,
-                 cwd : Union[Path,str,None] = None,
-                 expect_ok : Optional[bool] = True) -> Tuple[int,str,str]:
-    """Run the given command inside an asyncio subprocess.
-       
-       Returns (return code : int, stdout : str, stderr : str)
-    """
-    pipe = asyncio.subprocess.PIPE
-    proc = await asyncio.create_subprocess_exec(
-                    prog, *args, cwd=cwd,
-                    stdout=pipe, stderr=pipe)
-    stdout, stderr = await proc.communicate()
-    # note stdout/stderr are binary
-
-    out = stdout.decode('utf-8')
-    err = stderr.decode('utf-8')
-    if len(stdout) > 0:
-        _logger.info('%s stdout: %s', prog, out)
-    if len(stderr) > 0:
-        _logger.warning('%s stderr: %s', prog, err)
-
-    ret = -1
-    if proc.returncode is not None:
-        ret = proc.returncode
-    if expect_ok != (proc.returncode == 0):
-        _logger.error('%s returned %d', prog, ret)
-    if expect_ok is None:
-        _logger.info('%s returned %d', prog, ret)
-
-    return ret, out, err
+            await cancel_at(self.info.backend.type, ids)

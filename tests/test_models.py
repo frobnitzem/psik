@@ -15,11 +15,11 @@ from psik.models import (
 )
 
 def test_jobid():
-    x = Callback(jobid="123", jobndx=0, state=JobState.new, info=1)
+    x = Callback(jobid="123", jobndx=0, state=JobState.new, info="1")
     assert x.jobid == "123"
     assert x.jobndx == 0
     assert x.state == JobState.new
-    assert x.info == 1
+    assert x.info == "1"
 
     for fail in ["123.11178x", "123.11178.", "12.", ".33", "x12", "12e4"]:
         with pytest.raises(ValidationError):
@@ -33,6 +33,6 @@ def test_jobid():
     BackendConfig(type="nonlocal")
     JobSpec(script="pwd")
     JobSpec(name="test", script="pwd")
-    y = Transition(time=12.125, jobndx=-1, state=JobState.new, info=0)
-    assert y.fields() == (12.125, -1, "new", 0)
-    Callback(jobid="333.999", jobndx=1, state=JobState.canceled, info=0)
+    y = Transition(time=12.125, jobndx=-1, state=JobState.new, info="0")
+    assert y.fields() == (12.125, -1, "new", "0")
+    Callback(jobid="333.999", jobndx=1, state=JobState.canceled, info="0")

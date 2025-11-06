@@ -26,6 +26,13 @@ async def post_cb(request):
     #return web.Response(body=b'"OK"', content_type="application/json", status=200)
 
 @pytest_asyncio.fixture
+async def cb_server(aiohttp_server):
+    app = web.Application()
+    app.router.add_post('/callback', post_cb)
+    return await aiohttp_server(app)
+### end fixture ###
+
+@pytest_asyncio.fixture
 async def cb_client(aiohttp_client):
     app = web.Application()
     app.router.add_post('/callback', post_cb)
@@ -46,8 +53,8 @@ def test_verify():
         verify_signature("X", "Y", None)
 
 @pytest.mark.asyncio
-async def test_local_cb(cb_client):
-    cb_server = cb_client.server
+async def test_local_cb(cb_server): #cb_client):
+    #cb_server = cb_client.server
     ans = await post_json(str(cb_server.make_url("/callback")),
                 '{"name": "hello", "script": "echo hello; pwd"}',
 

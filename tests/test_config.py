@@ -6,7 +6,6 @@ import pytest
 from psik.config import load_config, Config
 from psik.manager import JobManager
 from psik.models import JobSpec, ResourceSpec, BackendConfig, JobState
-import psik.templates as templates
 
 cfg = """{
   "prefix": "%s",
@@ -54,12 +53,3 @@ async def test_create(tmp_path):
     assert job.base == base / job.stamp
     assert await (job.base / 'log').is_dir()
     assert await (job.base / 'work').is_dir()
-    assert await (job.base / 'scripts').is_dir()
-
-    assert os.access(Path(job.base) / 'scripts' / 'run', os.X_OK)
-    for act in templates.actions:
-        assert os.access(Path(job.base) / 'scripts' / act, os.X_OK)
-    async for f in (job.base / 'scripts').iterdir():
-        print(f"======== {f} ========")
-        print(await f.read_text())
-        print()
