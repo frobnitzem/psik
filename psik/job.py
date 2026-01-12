@@ -189,6 +189,12 @@ class Job:
         """ Hot start sets up the environment variables,
             then invokes self.spec.script.
 
+            Note that env_vars should define the following
+            so they are available in the job:
+            - jobid (native jobid)
+            - mpirun
+            - nodes
+
             It records the script return code as success
             or failure.
         """
@@ -204,11 +210,14 @@ class Job:
 
             # TODO: expand vars like $SLURM_JOB_NUM_NODES
             os.chdir(str(self.spec.directory))
-            env = dict(self.spec.environment)
+            if self.spec.inherit_environment:
+                env = dict(os.environ)
+            else:
+                env = {}
             env.update(env_vars)
-            # should set mpirun and nodes here too...
             env["jobndx"] = str(jobndx)
             env["base"] = str(self.base)
+            env.update(self.spec.environment)
 
             stdout_path = self.base/"log"/f"stdout.{jobndx}"
             stderr_path = self.base/"log"/f"stderr.{jobndx}"
