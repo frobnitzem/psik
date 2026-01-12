@@ -1,6 +1,6 @@
 [project]
 name = "psik"
-version = "3.0.0"
+version = "3.0.1"
 description = "Portable Submission Interface for Jobs"
 authors = [
  { name="David M. Rogers", email="predictivestatmech@gmail.com"}
