@@ -249,12 +249,9 @@ class Job:
             await self.read_info()
         await poll_at(self.info.backend.type, self)
 
-    async def cancel(self) -> None:
-        # Prevent a race condition by recording this first.
-        await self.reached(0, JobState.canceled)
-        #if not ok:
-        #    raise InvalidJobException("Unable to update job status.")
-        await self.read_info()
+    async def live_ids(self) -> List[str]:
+        if not self.valid:
+            await self.read_info()
 
         native_ids: Dict[int,str] = {}
         for t in self.history:
@@ -267,6 +264,13 @@ class Job:
             elif state == JobState.failed:
                 del native_ids[ndx]
 
-        ids = [job_id for ndx, job_id in native_ids.items()]
+        return [job_id for ndx, job_id in native_ids.items()]
+
+    async def cancel(self) -> None:
+        # Prevent a race condition by recording this first.
+        await self.reached(0, JobState.canceled)
+        #if not ok:
+        #    raise InvalidJobException("Unable to update job status.")
+        ids = await self.live_ids()
         if len(ids) > 0:
-            await cancel_at(self.info.backend.type, ids)
+            await cancel_at(self.info.backend.type, self)

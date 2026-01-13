@@ -128,8 +128,9 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
 
     return result
 
-async def cancel(jobinfos: List[str]) -> None:
+async def cancel(job: Job) -> None:
     machine_id = Machine["perlmutter"]
+    jobinfos = await job.live_ids()
 
     keypath = Path(os.environ["HOME"]) / ".superfacility" / "key.pem"
     try:

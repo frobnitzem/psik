@@ -2,12 +2,13 @@ import zipfile
 import base64
 import os, io
 
-def dir_to_str(directory_path: str) -> str:
+def dir_to_str(directory_path: str, skip_hidden=True) -> str:
     """
     Compresses a directory into a base64 encoded string using zipfile. 
     
     Args:
         directory_path (str): Path to the directory to compress. 
+        skip_hidden (bool):   Omit files starting with "."
     
     Returns: 
         str: Base64 encoded string representing the compressed directory. 
@@ -16,6 +17,8 @@ def dir_to_str(directory_path: str) -> str:
         with zipfile.ZipFile(f, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
             for root, _, files in os.walk(directory_path):
                 for file in files:
+                    if skip_hidden and file[0] == ".":
+                        continue
                     file_path = os.path.join(root, file)
                     #print(os.path.relpath(file_path, directory_path))
                     zip_file.write(file_path, arcname=os.path.relpath(file_path, directory_path))
@@ -33,4 +36,4 @@ def str_to_dir(compressed_string: str, target_directory: str) -> None:
     """
     decoded_data = base64.b64decode(compressed_string)
     with zipfile.ZipFile(io.BytesIO(decoded_data), 'r') as zip_file:
-        zip_file.extractall(target_directory) 
+        zip_file.extractall(target_directory)
