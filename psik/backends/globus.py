@@ -22,30 +22,29 @@ from ..models import (
 from ..console import runcmd
 from ..zipstr import dir_to_str, str_to_dir
 
-def send_prefix(backend: BackendConfig) -> Path:
-    """ Read the value of remote_prefix from backend.project_name.
+def send_prefix(backend: BackendConfig) -> str:
+    """ Read the remote's prefix from backend.project_name.
         Default to "%FIXME%" if unset.
     """
-    return Path( backend.project_name if backend.project_name \
+    return backend.project_name if backend.project_name \
                                 else "%FIXME%"
-               )
 
-def remote_prefix(pre: Path) -> Path:
+def remote_prefix(pre: str) -> Path:
     """ Correct the remote prefix path (handling the unset, FIXME case)
     """
     import os
     from pathlib import Path
-    if str(pre) != "%FIXME%":
-        return pre
+    if pre != "%FIXME%":
+        return Path(pre)
 
     home = Path()
     if "HOME" in os.environ:
         home = Path(os.environ["HOME"])
     return home/"psik_jobs"
 
-def remote_submit(config: Config,
+def remote_submit(cfg: str,
                   stamp: str,
-                  spec: JobSpec,
+                  jobspec: str,
                   zstr: Optional[str] = None):
     """ Function to run on the remote side which will submit the
         psik jobspec.
@@ -58,12 +57,14 @@ def remote_submit(config: Config,
     """
     import asyncio
     import os
-    from pathlib import Path
     import psik
     from psik.logs import logfile
 
-    config.prefix = remote_prefix(config.prefix)
+    config = psik.Config.model_validate_json(cfg)
+    config.prefix = remote_prefix(str(config.prefix))
     mgr = psik.JobManager(config)
+
+    spec = psik.JobSpec.model_validate_json(jobspec)
 
     async def submit_job():
         job = psik.Job(prefix / stamp)
@@ -86,22 +87,21 @@ def remote_submit(config: Config,
 
     return asyncio.run(submit_job())
 
-def remote_cancel(prefix: Path, stamp: str):
+def remote_cancel(rprefix: str, stamp: str):
     import asyncio
     from psik import Job
     from psik.logs import logfile
 
-    prefix = remote_prefix(prefix)
+    prefix = remote_prefix(rprefix)
     job = Job(prefix / stamp)
     with logfile(str(job.base/'log'/'console'), v=True, vv=False):
         asyncio.run( job.cancel() )
 
-def remote_poll(prefix: Path, stamp: str) -> Tuple[str,str,str]:
+def remote_poll(rprefix: str, stamp: str) -> Tuple[str,str,str]:
     import asyncio
-    import psik
     from psik.zipstr import dir_to_str
 
-    prefix = remote_prefix(prefix)
+    prefix = remote_prefix(rprefix)
     base = prefix/stamp
     #job = asyncio.run( Job(prefix / stamp) )
     hist = (base/"status.csv").read_text()
@@ -111,7 +111,7 @@ def remote_poll(prefix: Path, stamp: str) -> Tuple[str,str,str]:
     return hist, logs, data
 
 def send_config(bname: str, backend: BackendConfig) -> Config:
-    return Config(prefix = send_prefix(backend),
+    return Config(prefix = Path(send_prefix(backend)),
                   backends = { bname: BackendConfig.model_validate(
                                                     backend.attributes)
                              }
@@ -146,7 +146,11 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
         with Executor( endpoint_id = backend.queue_name
                      , client = gclient
                      ) as gce:
-            future = gce.submit(remote_submit, remote_config, job.stamp, jspec, zstr)
+            future = gce.submit(remote_submit,
+                    remote_config.model_dump_json(),
+                    job.stamp,
+                    jspec.model_dump_json(),
+                    zstr)
             _logger.info("Submitted job to globus")
             result = future.result()
     except Exception as err:
@@ -160,13 +164,13 @@ async def cancel(job: Job) -> None:
         await job.read_info()
 
     backend = job.info.backend
-    remote_prefix = send_prefix(backend)
+    rprefix = send_prefix(backend)
     try:
         gclient = Client()
         with Executor( endpoint_id = backend.queue_name
                      , client = gclient
                      ) as gce:
-            future = gce.submit(remote_cancel, remote_prefix, job.stamp)
+            future = gce.submit(remote_cancel, rprefix, job.stamp)
             _logger.info("Canceling %s", job.stamp)
             result = future.result()
     except Exception as err:
@@ -185,14 +189,14 @@ async def poll(job: Job) -> None:
 
     _logger.debug("Polling globus job.")
     backend = job.info.backend
-    remote_prefix = send_prefix(backend)
+    rprefix = send_prefix(backend)
     try:
         # TODO: read job.spec to create remote_config
         gclient = Client()
         with Executor( endpoint_id = backend.queue_name
                      , client = gclient
                      ) as gce:
-            future = gce.submit(remote_poll, remote_prefix, job.stamp)
+            future = gce.submit(remote_poll, rprefix, job.stamp)
             _logger.info("Canceling")
             hist, logs, data = future.result()
     except Exception as err:
@@ -231,7 +235,7 @@ async def poll(job: Job) -> None:
         _logger.info("No state updates. Skipping file refresh.")
         return
     # FIXME: rename remote console to console.1 locally
-    str_to_dir(logs, str(local_dir/"log"))
+    str_to_dir(logs, str(local_dir/"log.1"))
     # FIXME: only retrieve data if state.is_final()
     if job.history[-1].state.is_final():
         str_to_dir(data, job.spec.directory)
