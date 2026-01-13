@@ -81,7 +81,8 @@ def fork_job(write_fd: int, job: Job, jobndx: int) -> None:
 async def poll(job: Job) -> None:
     return None
 
-async def cancel(jobinfos: List[str]) -> None:
+async def cancel(job: Job) -> None:
+    jobinfos = await job.live_ids()
     for pid in jobinfos:
         try:
             os.kill(int(pid), signal.SIGTERM) # use SIGINT?

@@ -96,9 +96,9 @@ async def submit_at(backend: str, job, jobndx: int) -> Optional[str]: # type: ig
     submit = _lookup(backend, "submit")
     return await submit(job, jobndx)
 
-async def cancel_at(backend: str, jobids: List[str]) -> None:
+async def cancel_at(backend: str, job) -> None:
     cancel = _lookup(backend, "cancel")
-    await cancel(jobids)
+    await cancel(job)
 
 async def poll_at(backend: str, job) -> None:
     poll = _lookup(backend, "poll")
@@ -114,7 +114,7 @@ def check(backend):
     err = check_function_signature(submit, ['Job', int, Optional[str]])
     if err:
         raise KeyError(f"{backend}.submit: {err}")
-    err = check_function_signature(cancel, [List[str], None])
+    err = check_function_signature(cancel, ['Job', None])
     if err:
         raise KeyError(f"{backend}.cancel: {err}")
     err = check_function_signature(poll, ['Job', None])

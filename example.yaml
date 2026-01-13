@@ -4,12 +4,13 @@ script: |
   echo $jobid $jobndx
   $mpirun hostname
 
-backend: slurm
+backend: defiant
 resources:
   num_nodes: 2
   duration: 30
   processes_per_node: 4
   cpu_cores_per_process: 15
-  gpu_cores_per_process: 1
+#  gpu_cores_per_process: 1
 # translates to:
 # salloc -N2 -c15 --gpus-per-task 1 --ntasks 4 -t 10
+# salloc -N2 -c15 --ntasks 4 -t 10

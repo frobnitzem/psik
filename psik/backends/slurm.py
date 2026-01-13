@@ -103,6 +103,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
 async def poll(job: Job) -> None:
     return None
 
-async def cancel(jobinfos: List[str]) -> None:
+async def cancel(job: Job) -> None:
+    jobinfos = await job.live_ids()
     ret, out, err = await runcmd("scancel", *jobinfos)
     return None

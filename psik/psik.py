@@ -128,16 +128,16 @@ def rm(stamps : List[str] = typer.Argument(...,
 @app.command()
 def submit(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
         submit  : Annotated[bool, typer.Option(help="Submit job to queue")] = True,
-        newdir: Annotated[bool, typer.Option(help="If spec.directory is unset, create a new (empty) working dir for this job.")] = False,
+        here: Annotated[bool, typer.Option(help="Set spec.directory to the current working directory.")] = False,
         v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """ Synonym for run
     """
-    run(jobspec, submit, newdir, v, vv, cfg)
+    run(jobspec, submit, here, v, vv, cfg)
 
 @app.command()
 def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
         submit  : Annotated[bool, typer.Option(help="Submit job to queue")] = True,
-        newdir: Annotated[bool, typer.Option(help="If spec.directory is unset, create a new (empty) working dir for this job.")] = False,
+        here: Annotated[bool, typer.Option(help="Set spec.directory to the current working directory.")] = False,
         v : V1 = False, vv : V2 = False, cfg : CfgArg = None):
     """
     Create a job directory from a jobspec.json file.
@@ -154,8 +154,11 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
     except Exception as e:
         _logger.exception("Error parsing JobSpec from file %s", jobspec)
         raise typer.Exit(code=1)
-    if (not newdir) and spec.directory is None: # default to current working dir.
-        spec.directory = str(Path().resolve())
+    if here: # run in current working dir.
+        cwd = str(Path().resolve())
+        if spec.directory is not None:
+            _logger.warning("Overriding spec.directory to %s", cwd)
+        spec.directory = cwd
 
     async def create_submit(spec, submit):
         job = await mgr.create(spec)
