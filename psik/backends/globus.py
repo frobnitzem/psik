@@ -62,12 +62,14 @@ def remote_submit(cfg: str,
 
     config = psik.Config.model_validate_json(cfg)
     config.prefix = remote_prefix(str(config.prefix))
+    if not config.prefix.is_dir():
+        config.prefix.mkdir(parents=True)
     mgr = psik.JobManager(config)
 
     spec = psik.JobSpec.model_validate_json(jobspec)
 
     async def submit_job():
-        job = psik.Job(prefix / stamp)
+        job = psik.Job(config.prefix / stamp)
         await job.base.mkdir(exist_ok=True, parents=True)
         # Ensure working directory exists.
         if spec.directory is None: # should always be True
@@ -80,10 +82,11 @@ def remote_submit(cfg: str,
             job = await job
         else:
             job = await mgr.create(spec, job.base)
-        with logfile(str(job.base/'log'/'console'), v=True, vv=False):
+        with logfile(str(job.base/'log'/'console'), v=True, vv=True):
             if zstr is not None:
                 psik.zipstr.str_to_dir(zstr, spec.directory)
-            return await job.submit()
+            jobndx, native_job_id = await job.submit()
+            return native_job_id
 
     return asyncio.run(submit_job())
 
@@ -127,6 +130,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
 
     jspec = job.spec.copy()
     jspec.directory = None
+    jspec.attributes = json.loads(jspec.attributes.get("attributes", "{}"))
 
     # Use project_name as psik prefix (if present)
     remote_config = send_config(job.spec.backend, backend)
@@ -177,14 +181,18 @@ async def cancel(job: Job) -> None:
         _logger.error("Error canceling job %s: %s", job.stamp, err)
 
 async def poll(job: Job) -> None:
-    jobid = "" # Determine jobid for last queued jobndx
-    jobndx = 0
+    #jobid = "" # Determine jobid for last queued jobndx
+    #jobndx = 0
+    # events we have seen
+    events: Set[Tuple[int,JobState]] = set()
     for trs in job.history:
-        if trs.state == JobState.queued:
-            jobid = trs.info
-            jobndx = trs.jobndx
-    if jobid == "":
-        raise ValueError("Job has not been queued.")
+        events.add( (trs.jobndx, trs.state) )
+        #if trs.state == JobState.queued:
+        #    jobid = trs.info
+        #    jobndx = trs.jobndx
+    #if jobid == "":
+    #    raise ValueError("Job has not been queued.")
+
     assert job.spec.directory is not None, "Invalid job.spec"
 
     _logger.debug("Polling globus job.")
@@ -205,14 +213,11 @@ async def poll(job: Job) -> None:
     str_to_dir(data, job.spec.directory)
     local_dir = Path(job.base)
 
-    history = [ line.strip().split(',', 3) for line in hist.split('\n') ]
-    # filter events we have seen
-    events: Set[Tuple[int,JobState]] = set()
-    for trs in job.history:
-        events.add( (trs.jobndx, trs.state) )
-
     updated = False
-    for step in history:
+    for line in hist.split("\n"):
+        step = line.strip().split(',', 3)
+        if len(step) <= 1:
+            continue
         try:
             trs = Transition(time=float(step[0]),
                              jobndx=int(step[1]),
