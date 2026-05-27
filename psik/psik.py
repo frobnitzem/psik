@@ -192,8 +192,11 @@ def start(stamps : List[str] = typer.Argument(...,
     for stamp in stamps:
         job = Job(base / str(stamp))
         with logfile(str(job.base/'log'/'console'), v=v, vv=vv):
-            run_async( job.submit() )
-            print(f"Started {job.stamp}")
+            try:
+                run_async( job.submit() )
+                print(f"Queued {job.stamp}")
+            except Exception as e:
+                _logger.exception("Error submitting job to queue")
 
 @app.command()
 def poll(stamps : List[str] = typer.Argument(...,

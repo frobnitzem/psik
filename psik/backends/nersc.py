@@ -4,6 +4,7 @@ import os
 import sys
 import json
 from pathlib import Path
+from shlex import quote
 import logging
 _logger = logging.getLogger(__name__)
 
@@ -68,11 +69,8 @@ export nodes=$SLURM_JOB_NUM_NODES
 export jobid=$SLURM_JOB_ID
 export mpirun=srun
 # use exec to forward signals properly
-exec "%(venv)s/bin/psik" hot-start --config %(venv)s/etc/psik.json %(stamp)s %(jobndx)d '%(jobspec)s' '%(zstr)s'
+exec "%(venv)s/bin/psik" hot-start --config %(venv)s/etc/psik.json %(stamp)s %(jobndx)d %(jobspec)s %(zstr)s
 """
-
-def quote(s: str) -> str:
-    return s
 
 async def submit(job: Job, jobndx: int) -> Optional[str]:
     """
@@ -111,7 +109,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
         stamp = job.stamp,
         jobspec = quote(spec),
         jobndx = jobndx,
-        zstr = zstr,
+        zstr = quote(zstr),
     )
 
     keypath = Path(os.environ["HOME"]) / ".superfacility" / "key.pem"
