@@ -239,7 +239,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
         return None
 
 async def download_file(session: aiohttp.ClientSession,
-                        resource_id: str, path: str) -> bytes:
+                        resource_id: str, path: str) -> Optional[bytes]:
     quoted_path = urllib.parse.quote(path)
     url = f"/api/v1/filesystem/download/{resource_id}?path={quoted_path}"
 
@@ -275,7 +275,9 @@ async def download_file(session: aiohttp.ClientSession,
             return None
 
         result = await resp.json()
+        print("FIXME! Don't know how to extract file contents from task result:")
         print(result)
+    return None
 
 @asynccontextmanager
 async def iri_session(backend: BackendConfig):
