@@ -74,7 +74,8 @@ async def post_json(url: str,
     except ImportError:
         pass
 
-    async with cert.ClientSession(base) as session:
+    # trust_env=True checks HTTP_PROXY, HTTPS_PROXY, WS_PROXY, and WSS_PROXY (all case-insensitive).
+    async with cert.ClientSession(base, trust_env=True) as session:
         async with session.post(url, data=info, headers=headers) \
                     as response:
             if response.status != 200:

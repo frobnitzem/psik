@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 import urllib
+from shlex import quote
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -50,6 +51,8 @@ from ..zipstr import dir_to_str
 #   #uv pip install --python "%(venv)s/bin/python" certified aiohttp psik libenv
 
 launch_script = """
+export https_proxy=http://proxy.ccs.ornl.gov:3128/
+
 if ! [ -x "%(venv)s/bin/psik" ]; then
     python3.11 -m venv "%(venv)s"
     %(venv)s/bin/pip install certified aiohttp libenv git+https://github.com/frobnitzem/psik
@@ -64,11 +67,8 @@ export nodes=$SLURM_JOB_NUM_NODES
 export jobid=$SLURM_JOB_ID
 export mpirun=srun
 # use exec to forward signals properly
-exec "%(venv)s/bin/psik" hot-start --config %(venv)s/etc/psik.json %(stamp)s %(jobndx)d '%(jobspec)s' '%(zstr)s'
+exec "%(venv)s/bin/psik" hot-start --config %(venv)s/etc/psik.json %(stamp)s %(jobndx)d %(jobspec)s %(zstr)s
 """
-
-def quote(s: str) -> str:
-    return s
 
 def encapsulated_script(job: Job, jobndx: int) -> str:
     """ Create and return an encapsulated jobscript that
@@ -97,7 +97,7 @@ def encapsulated_script(job: Job, jobndx: int) -> str:
         stamp = job.stamp,
         jobspec = quote(spec),
         jobndx = jobndx,
-        zstr = zstr,
+        zstr = quote(zstr),
     )
     return jobscript
 
