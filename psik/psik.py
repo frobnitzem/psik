@@ -4,6 +4,7 @@ from pathlib import Path
 from typing_extensions import Annotated
 import sys
 import os
+import re
 import shutil
 import logging
 _logger = logging.getLogger(__name__)
@@ -152,7 +153,10 @@ def run(jobspec : str = typer.Argument(..., help="jobspec.json file to run"),
     try:
         spec = load_jobspec(jobspec)
     except Exception as e:
-        _logger.exception("Error parsing JobSpec from file %s", jobspec)
+        msg = "Error parsing JobSpec from file %s"
+        if re.match(r'^[0-9]+(\.[0-9]+)?$', jobspec):
+            msg += f"\nDid you mean? psik start {jobspec}"
+        _logger.exception(msg, jobspec)
         raise typer.Exit(code=1)
     if here: # run in current working dir.
         cwd = str(Path().resolve())
