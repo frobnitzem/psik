@@ -8,7 +8,10 @@ from shlex import quote
 import logging
 _logger = logging.getLogger(__name__)
 
-from certified import Certified
+try:
+    from certified import Certified # type: ignore[import-not-found]
+except ImportError:
+    Certified = None
 import aiohttp
 
 import psik
@@ -36,7 +39,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
 
       remote_url: URL of psik_api
       remote_backend: name of backend to use on remote side
-      next: job.backend.attributes to forward to API
+      next: job.backend.attributes to forward to API (string which gets parsed to json)
 
     TODO: use submit=False if there are files to send.
     """
@@ -56,7 +59,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
 
     job.info = job.info.copy()
     job.info.backend = job.info.backend.copy()
-    job.info.backend.attributes = job.info.backend.attributes.get("next", {})
+    job.info.backend.attributes = json.loads( job.info.backend.attributes.get("next", "{}") )
 
     spec.directory = None
     headers = { "User-Agent": f"psik/{psik.__version__}",
@@ -64,8 +67,9 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
 
     mtls = use_mtls and remote_url.startswith("https")
     if mtls:
+        assert Certified is not None, "certified package is required for mTLS"
         cert = Certified()
-    else
+    else:
         cert = aiohttp
 
     try:
@@ -94,8 +98,9 @@ async def cancel(job: Job) -> None:
 
     mtls = use_mtls and remote_url.startswith("https")
     if mtls:
+        assert Certified is not None, "certified package is required for mTLS"
         cert = Certified()
-    else
+    else:
         cert = aiohttp
 
     try:
@@ -140,8 +145,9 @@ async def poll(job: Job) -> None:
 
     mtls = use_mtls and remote_url.startswith("https")
     if mtls:
+        assert Certified is not None, "certified package is required for mTLS"
         cert = Certified()
-    else
+    else:
         cert = aiohttp
 
     local_dir = Path(job.base)
