@@ -41,7 +41,7 @@ async def make_request(fn, *args, **kws):
 
         except aiohttp.ClientResponseError as e:
             # Read the raw error text from the server response
-            error_text = await response.text()
+            error_text = await response.json()
 
             _logger.error(f"HTTP Error {e.status}: {e.message}")
             _logger.error(f"API Error Details: {error_text}")
@@ -95,17 +95,18 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
     else:
         cert = aiohttp
 
+    closing = []
     try:
         async with cert.ClientSession(
                         base_url=remote_url,
                         headers=headers
                     ) as client:
-            params = {"submit": True}
+            params = {"submit": "true"}
             if files_to_send:
                 # 1. just allocate the jobid
-                params["submit"] = False
+                params["submit"] = "false"
             resp = await client.post("/v3/jobs", json=spec.model_dump(), params=params)
-            result = await resp.text()
+            result = await resp.json()
             if resp.status//100 != 2:
                 _logger.error("Error submitting job script to %s: %s", remote_url, result)
                 return None
@@ -118,27 +119,32 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
                 for f in dir_path.rglob('*'):
                     if f.is_file() and not f.name.startswith('.'):
                         # Use relative path as filename
-                        rel_path = f.relative_to(dir_path)
-                        data.add_field('files', 
-                                       filename=str(rel_path), 
-                                       filepath=str(f))
+                        rel_path = str(f.relative_to(dir_path))
+                        obj = open(f, "rb")
+                        data.add_field('files',
+                                       filename=str(rel_path),
+                                       value=obj)
+                        closing.append(obj)
 
                 # 3. Post to files.
                 resp = await client.post(f"/v3/jobs/{jobid}/files", data=data)
                 if resp.status // 100 != 2:
-                    result_files = await resp.text()
+                    result_files = await resp.json()
                     _logger.error("Error uploading files to %s: %s", remote_url, result_files)
                     return None
 
                 # 3. Release the job to the queue.
                 resp = await client.post(f"/v3/jobs/{jobid}/start")
                 if resp.status // 100 != 2:
-                    result = await resp.text()
+                    result = await resp.json()
                     _logger.error("Error starting job %s at %s: %s", jobid, remote_url, result)
                     return None
     except Exception as err:
         _logger.error("Error submitting job script to %s: %s", remote_url, err)
         return None
+    finally:
+        for obj in closing:
+            obj.close()
 
     return jobid
 
@@ -162,9 +168,9 @@ async def cancel(job: Job) -> None:
                         headers=headers
                     ) as client:
             for id in jobinfos:
-                resp = await client.delete("/v3/jobs/{id}")
+                resp = await client.delete(f"/v3/jobs/{id}")
                 if resp.status//100 != 2:
-                    err = await resp.text()
+                    err = await resp.json()
                     _logger.warning("Error returned from %s during cancel %s: %s", remote_url, id, err)
     except Exception as err:
         _logger.error("Error connecting to %s: %s", remote_url, err)
@@ -221,7 +227,7 @@ async def poll(job: Job) -> None:
                     ) as client:
             resp = await client.get("/v3/jobs/{jobid}")
             if resp.status//100 != 2:
-                err = await resp.text()
+                err = await resp.json()
                 _logger.warning("Error returned from %s during GET %s: %s", remote_url, jobid, err)
                 return
 
@@ -233,7 +239,7 @@ async def poll(job: Job) -> None:
                 # pull logs
                 resp = await client.get("/v3/logs/{jobid}")
                 if resp.status//100 != 2:
-                    err = await resp.text()
+                    err = await resp.json()
                     _logger.warning("Error returned from %s during GET %s: %s", remote_url, jobid, err)
                     return
                 logs = await resp.json()
