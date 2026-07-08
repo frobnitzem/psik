@@ -10,7 +10,7 @@ https://auth.globus.org/scopes/ed3e577d-f7f3-4639-b96e-ff5a8445d699/iri_api
 Backend configuration attributes:
 - api_url: Base URL for the IRI API (default: https://api.iri.nersc.gov)
 - resource_id: The resource ID to submit jobs to (e.g., "perlmutter")
-- token: Globus access token (can also be set via IRI_TOKEN env var)
+- token: set via IRI_TOKEN env var. each facility currently has their own issuance method
 """
 
 from typing import Optional
@@ -70,6 +70,9 @@ export mpirun=srun
 exec "%(venv)s/bin/psik" hot-start --config %(venv)s/etc/psik.json %(stamp)s %(jobndx)d %(jobspec)s %(zstr)s
 """
 
+# FIXME: query some API to get a portable prefix accessible at ea. facility
+psik_prefix = "/lustre/polis/csc266/scratch/99r/psik"
+
 def encapsulated_script(job: Job, jobndx: int) -> str:
     """ Create and return an encapsulated jobscript that
         1. installs psik if needed
@@ -78,12 +81,12 @@ def encapsulated_script(job: Job, jobndx: int) -> str:
     assert job.spec.directory is not None
 
     # TODO: gather settings from job.info.backend.attributes
-    remote_prefix = "$HOME/psik"
+    remote_prefix = psik_prefix
     remote_config = Config(prefix=Path(remote_prefix),
                            backends={
                                job.spec.backend: BackendConfig()
                            })
-    remote_venv = "$HOME/venv"
+    remote_venv = psik_prefix+"/venv"
 
     jspec = job.spec.copy()
     jspec.directory = None
@@ -141,6 +144,61 @@ def build_iri_jobspec(job: Job, jobndx: int) -> dict:  # type: ignore[type-arg]
     """Convert psik JobSpec to IRI JobSpec format."""
     spec = job.spec
     resources = spec.resources
+    """
+Note: need to make use of launcher/pre/post scripts here:
+{
+  "executable": "/usr/bin/python",
+  "container": {
+    "image": "docker.io/library/ubuntu:latest",
+    "volume_mounts": [
+      {
+        "source": "/data/project",
+        "target": "/mnt/data",
+        "read_only": true,
+        "additionalProp1": {}
+      }
+    ],
+    "additionalProp1": {}
+  },
+  "arguments": [
+    "-n",
+    "100"
+  ],
+  "directory": "/home/user/work",
+  "name": "my-job",
+  "inherit_environment": true,
+  "environment": {
+    "OMP_NUM_THREADS": "4"
+  },
+  "stdin_path": "/home/user/input.txt",
+  "stdout_path": "/home/user/output.txt",
+  "stderr_path": "/home/user/error.txt",
+  "resources": {
+    "node_count": 2,
+    "process_count": 64,
+    "processes_per_node": 32,
+    "cpu_cores_per_process": 2,
+    "gpu_cores_per_process": 1,
+    "exclusive_node_use": true,
+    "memory": 17179869184,
+    "additionalProp1": {}
+  },
+  "attributes": {
+    "duration": 30,
+    "queue_name": "debug",
+    "account": "proj123",
+    "reservation_id": "resv-42",
+    "custom_attributes": {
+      "constraint": "gpu"
+    },
+    "additionalProp1": {}
+  },
+  "pre_launch": "module load cuda",
+  "post_launch": "echo done",
+  "launcher": "srun"
+}
+"""
+
     
     # Build IRI ResourceSpec
     resource_spec: dict = {}  # type: ignore[type-arg]
@@ -186,7 +244,7 @@ def build_iri_jobspec(job: Job, jobndx: int) -> dict:  # type: ignore[type-arg]
         iri_spec["name"] = spec.name
     #if spec.directory:
     #    iri_spec["directory"] = spec.directory
-    iri_spec["directory"] = "/tmp"
+    iri_spec["directory"] = psik_prefix
     if spec.environment:
         iri_spec["environment"] = spec.environment
     if not spec.inherit_environment:
