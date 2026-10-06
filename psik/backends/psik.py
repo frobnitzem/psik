@@ -105,7 +105,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
             if files_to_send:
                 # 1. just allocate the jobid
                 params["submit"] = "false"
-            resp = await client.post("/v3/jobs", json=spec.model_dump(), params=params)
+            resp = await client.post("/v3/jobs", json=spec.model_dump(mode="json"), params=params)
             result = await resp.json()
             if resp.status//100 != 2:
                 _logger.error("Error submitting job script to %s: %s", remote_url, result)
