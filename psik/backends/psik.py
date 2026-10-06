@@ -14,6 +14,7 @@ except ImportError:
     Certified = None
 import aiohttp
 
+from pydantic import BaseModel
 import psik
 from ..job import Job
 from ..config import Config
@@ -22,12 +23,19 @@ from ..models import (
     JobSpec,
     ExtraInfo,
     BackendConfig,
-    Transition,
 )
 from ..console import runcmd
 from ..zipstr import dir_to_str
 
 from .slurm import mk_args
+
+class JobStepInfo(BaseModel):
+    #jobid   : str
+    #name    : str
+    updated : float
+    jobndx  : int
+    state   : JobState
+    info    : str
 
 use_mtls = True
 
@@ -105,7 +113,7 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
             if files_to_send:
                 # 1. just allocate the jobid
                 params["submit"] = "false"
-            resp = await client.post("/v3/jobs", json=spec.model_dump(), params=params)
+            resp = await client.post("/v3/jobs", json=spec.model_dump(mode="json"), params=params)
             result = await resp.json()
             if resp.status//100 != 2:
                 _logger.error("Error submitting job script to %s: %s", remote_url, result)
@@ -176,11 +184,11 @@ async def cancel(job: Job) -> None:
         _logger.error("Error connecting to %s: %s", remote_url, err)
 
 
-async def update_status(job: Job, history: List[Transition]):
+async def update_status(job: Job, history: List[JobStepInfo]):
     # filter events we have seen
     events: Set[Tuple[int,JobState]] = set()
-    for trs in job.history:
-        events.add( (trs.jobndx, trs.state) )
+    for seen in job.history:
+        events.add( (seen.jobndx, seen.state) )
 
     updated = False
     for trs in history:
@@ -192,7 +200,7 @@ async def update_status(job: Job, history: List[Transition]):
         print(f"- {trs}")
         events.add(key)
         await job.reached(trs.jobndx, trs.state, trs.info,
-                          backdate=trs.time)
+                          backdate=trs.updated)
 
     return updated
 
@@ -225,19 +233,19 @@ async def poll(job: Job) -> None:
                         base_url=remote_url,
                         headers=headers
                     ) as client:
-            resp = await client.get("/v3/jobs/{jobid}")
+            resp = await client.get(f"/v3/jobs/{jobid}")
             if resp.status//100 != 2:
                 err = await resp.json()
                 _logger.warning("Error returned from %s during GET %s: %s", remote_url, jobid, err)
                 return
 
-            history = [ Transition.model_validate(trs) \
+            history = [ JobStepInfo.model_validate(trs) \
                         for trs in await resp.json() ]
             updated = await update_status(job, history)
 
             if updated or job.history[-1].state == JobState.active:
                 # pull logs
-                resp = await client.get("/v3/logs/{jobid}")
+                resp = await client.get(f"/v3/jobs/{jobid}/logs")
                 if resp.status//100 != 2:
                     err = await resp.json()
                     _logger.warning("Error returned from %s during GET %s: %s", remote_url, jobid, err)

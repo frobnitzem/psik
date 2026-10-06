@@ -71,7 +71,7 @@ async def post_json(url: str,
     try:
         from certified import Certified # type: ignore[import-not-found]
         cert = Certified() # type: ignore[assignment]
-    except ImportError:
+    except Exception:
         pass
 
     # trust_env=True checks HTTP_PROXY, HTTPS_PROXY, WS_PROXY, and WSS_PROXY (all case-insensitive).
