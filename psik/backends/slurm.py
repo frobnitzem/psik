@@ -81,8 +81,9 @@ async def submit(job: Job, jobndx: int) -> Optional[str]:
     Create a templated run-script and execute it
     via SLURM.
     """
+    psik_python = job.info.backend.attributes.get("psik_python", sys.executable)
     jobscript = slurm_script % dict(
-        psik_python = sys.executable,
+        psik_python = psik_python,
         base = job.base,
         jobndx = jobndx,
     )
