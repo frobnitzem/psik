@@ -187,8 +187,8 @@ async def cancel(job: Job) -> None:
 async def update_status(job: Job, history: List[JobStepInfo]):
     # filter events we have seen
     events: Set[Tuple[int,JobState]] = set()
-    for trs in job.history:
-        events.add( (trs.jobndx, trs.state) )
+    for seen in job.history:
+        events.add( (seen.jobndx, seen.state) )
 
     updated = False
     for trs in history:
